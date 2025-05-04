@@ -34,11 +34,11 @@ class _MjpegViewState extends State<MjpegView> {
     try {
       // Look for frame boundary
       final boundary = '--boundarydonotcross'.codeUnits;
-      final index = data.indexOf(boundary[0]);
+      final boundaryIndex = data.indexOf(boundary[0]);
       
-      if (index != -1) {
+      if (boundaryIndex != -1) {
         // Extract frame data
-        final frameData = data.sublist(0, index);
+        final frameData = data.sublist(0, boundaryIndex);
         return Uint8List.fromList(frameData);
       }
       return null;
@@ -78,8 +78,7 @@ class _MjpegViewState extends State<MjpegView> {
           ..headers['Connection'] = 'keep-alive'
           ..headers['Cache-Control'] = 'no-cache'
           ..headers['Pragma'] = 'no-cache'
-          ..headers['User-Agent'] = 'Flutter MJPEG Viewer'
-          ..headers['Authorization'] = 'Basic ${base64Encode(utf8.encode('username:password'))}'; // Add basic auth if needed
+          ..headers['User-Agent'] = 'Flutter MJPEG Viewer';
 
         final response = await client.send(request);
 
@@ -101,7 +100,7 @@ class _MjpegViewState extends State<MjpegView> {
               if (mounted && !_isReconnecting) {
                 _isReconnecting = true;
                 setState(() {
-                  _error = 'Reconnecting...';
+                  _error = 'Stream Error: $error';
                   _isLoading = true;
                 });
                 
@@ -125,7 +124,7 @@ class _MjpegViewState extends State<MjpegView> {
               if (mounted && !_isReconnecting) {
                 _isReconnecting = true;
                 setState(() {
-                  _error = 'Reconnecting...';
+                  _error = 'Stream connection closed';
                   _isLoading = true;
                 });
                 
@@ -171,8 +170,8 @@ class _MjpegViewState extends State<MjpegView> {
       if (mounted && !_isReconnecting) {
         _isReconnecting = true;
         setState(() {
-          _error = 'Reconnecting...';
-          _isLoading = true;
+          _error = 'Initial connection failed: $e';
+          _isLoading = false;
         });
         
         // Wait and retry

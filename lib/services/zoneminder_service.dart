@@ -148,7 +148,7 @@ class ZoneMinderService {
     final random = Random();
     final connKey = random.nextInt(1000000);
     final token = _accessToken ?? 'noauth';
-    return '$_baseUrl/cgi-bin/nph-zms?mode=jpeg&monitor=$monitorId&scale=100&maxfps=5&buffer=1000&random=$connKey&auth=$token';
+    return '$_baseUrl/cgi-bin/nph-zms?mode=single&monitor=$monitorId&scale=100&maxfps=5&buffer=1000&random=$connKey&auth=$token';
   }
 
   Future<void> setBaseUrl(String url) async {
