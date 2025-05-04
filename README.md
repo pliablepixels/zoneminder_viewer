@@ -75,4 +75,4 @@ The app will launch on your macOS system. You'll need to:
 2. Enter your credentials
 3. The app will display your camera monitors in a grid view
 
-PS: If you want to use windsurf, and use MacOS. Make sure you make it use bash and not zsh. If you do, windsurf may not be able to detect your terminal exit status properly for commands.
+PS: If you want to use windsurf, and use MacOS. Make sure you make it use bash and not zsh. If you do use zsh, especially with power10k, windsurf may not be able to detect your terminal exit status properly for commands.
