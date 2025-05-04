@@ -29,13 +29,19 @@ From then, I had to spend 3-4 hours to keep tweaking it via prompts and it final
 
 * The process was both fun and frustrating. It was wonderful to see windsurf apply its agents and tools to create my directories, run code, analyze output and try to auto fix them. The flow was seamless - that is the power of agents and tools. That being said, when you look beyond the surface and stop being amazed at how it automates steps, you come to the conclusion this is like taking a very inexperienced developer with access to, say, stackoverflow through building an app. Windsurf would continously make confident changes that would'nt work, then extract error logs and try to fix them. **That makes sense - the "reasoning" part of most of these tools is the most underdeveloped. They are good at taking a problem statement and trying to fix it. Therefore, the problem needs to occur for them to know how to fix it.** (This is also why its fascinating to see it create and self fix, which is a great thing to watch unfold, but eventually wastes a lot of time) This is unlike a seasoned developer who can implement reasoning and logic from the start. The entire experience was similar to starting to past code from elsewhere and debugging our way towards fixing it for the most part.
 
-* That being said, I was particularly impressed by its problem solving skills for specific areas. This project requires viewing MJPEG streams. As simple as that requirement is, it is hard to implement in flutter for the desktop (google for this problem). The gist of the problem is that MJPEG is a continuous stream of images, that never stops. Therefore, if you do an http get, it will never stop receiving data. I had to hint it a bit to look at a modified http dart implementation that implemented HTTP FETCH and it figured out its existing `Image.Network` widget wouldn't work because it used an older http stack. It then proceeded to implement its own MJPEG widget to overcome this issue. That impressed me. That being said, the code still doesn't work. If you change the `getStreamUrl` function in `zoneminder_service.dart` to change `mode=jpeg` to `mode=single` it displays the image, but the current implementation of its custom MJPEG class (`mjpeg_view.dart`) terminates the stream prematurely. It was funny though, that it finally suggested I replace streaming MJPEG with a single photo to make it work. Sneaky bot :-))
+* That being said, I was particularly impressed by its problem solving skills for specific areas. This project requires viewing MJPEG streams. As simple as that requirement is, it is hard to implement in flutter for the desktop (google for this problem). The gist of the problem is that MJPEG is a continuous stream of images, that never stops. Therefore, if you do an http get, it will never stop receiving data. I had to hint it a bit to look at a modified http dart implementation that implemented HTTP FETCH and it figured out its existing `Image.Network` widget wouldn't work because it used an older http stack. It then proceeded to implement its own MJPEG widget to overcome this issue. That impressed me.
+
+
+![](images/mjpegsolving.png?raw=true)
+
+
+ That being said, the code still doesn't work. If you change the `getStreamUrl` function in `zoneminder_service.dart` to change `mode=jpeg` to `mode=single` it displays the image, but the current implementation of its custom MJPEG class (`mjpeg_view.dart`) terminates the stream prematurely. It was funny though, that it finally suggested I replace streaming MJPEG with a single photo to make it work. Sneaky bot :-))
 
 ![](images/funny.png?raw=true)
 
 
 # Conclusion
-1. Writing detailed PRDs did not work for me. It confused the agents way too much to get to a working system
+1. **Writing detailed PRDs did not work for me**. It confused the agents way too much to get to a working system. It was great to start, but end result was a massive mess to actually get to a running app.
 2. Starting small and incrementally building the app worked much better
 3. Being super specific helps, but almost to a point that you have to be the guiding expert
 4. The agents work better by creating problems and then trying to fix them (takes a lot of time though, but it eventuall gets there)
