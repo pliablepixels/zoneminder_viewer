@@ -31,7 +31,7 @@ From then, I had to spend 3-4 hours to keep tweaking it via prompts and it final
 
 * That being said, I was particularly impressed by its problem solving skills for specific areas. This project requires viewing MJPEG streams. As simple as that requirement is, it is hard to implement in flutter for the desktop (google for this problem). The gist of the problem is that MJPEG is a continuous stream of images, that never stops. Therefore, if you do an http get, it will never stop receiving data. I had to hint it a bit to look at a modified http dart implementation that implemented HTTP FETCH and it figured out its existing `Image.Network` widget wouldn't work because it used an older http stack. It then proceeded to implement its own MJPEG widget to overcome this issue. That impressed me. That being said, the code still doesn't work. If you change the `getStreamUrl` function in `zoneminder_service.dart` to change `mode=jpeg` to `mode=single` it displays the image, but the current implementation of its custom MJPEG class (`mjpeg_view.dart`) terminates the stream prematurely. It was funny though, that it finally suggested I replace streaming MJPEG with a single photo to make it work. Sneaky bot :-))
 
-![](images/funny.png?raw=true | width=200)
+![](images/funny.png?raw=true)
 
 
 # Conclusion
