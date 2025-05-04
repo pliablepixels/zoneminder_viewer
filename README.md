@@ -41,13 +41,15 @@ From then, I had to spend 3-4 hours to keep tweaking it via prompts and it final
 
 
 # Conclusion
-1. **Writing detailed PRDs did not work for me**. It confused the agents way too much to get to a working system. It was great to start, but end result was a massive mess to actually get to a running app.
-2. Starting small and incrementally building the app worked much better
-3. Being super specific helps, but almost to a point that you have to be the guiding expert
-4. The agents work better by creating problems and then trying to fix them (takes a lot of time though, but it eventuall gets there)
-5. There is a solid place for these tools. They get you started reasonably well, but don't go overboard. You still need to be the "expert" and you still need to know when these tools go for a loop (not kidding)! 
-6. They are good at solving contained jobs. 
-7. They are _very_ _very_ _very_ far from being you
+
+* windsurf was **way ahead** of copilot agent mode
+* **Writing detailed PRDs did not work for me**. It confused the agents way too much to get to a working system. It was great to start, but end result was a massive mess to actually get to a running app.
+* Starting small and incrementally building the app worked much better
+* Being super specific helps, but almost to a point that you have to be the guiding expert
+* The agents work better by creating problems and then trying to fix them (takes a lot of time though, but it eventuall gets there)
+* There is a solid place for these tools. They get you started reasonably well, but don't go overboard. You still need to be the "expert" and you still need to know when these tools go for a loop (not kidding)! 
+* They are good at solving contained jobs. 
+* They are _very_ _very_ _very_ far from being you
 
 ## Building the Project
 
