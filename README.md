@@ -40,3 +40,29 @@ From then, I had to spend 3-4 hours to keep tweaking it and it finally worked. G
 2. Starting small and incrementally building the app worked much better
 3. Being super specific helps, but almost to a point that you have to be the guiding expert
 4. The agents work better by creating problems and then trying to fix them (takes a lot of time though, but it eventuall gets there)
+
+## Building the Project
+
+To clone and build this project:
+
+1. Install Flutter SDK from [flutter.dev](https://flutter.dev/docs/get-started/install)
+2. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/zoneminder_viewer.git
+   cd zoneminder_viewer
+   ```
+3. Install dependencies:
+   ```bash
+   flutter pub get
+   ```
+4. Run the app:
+   ```bash
+   flutter run -d macos
+   ```
+
+The app will launch on your macOS system. You'll need to:
+1. Enter your ZoneMinder server URL
+2. Enter your credentials
+3. The app will display your camera monitors in a grid view
+
+PS: If you want to use windsurf, and use MacOS. Make sure you make it use bash and not zsh. If you do, windsurf may not be able to detect your terminal exit status properly for commands.
