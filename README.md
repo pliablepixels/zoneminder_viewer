@@ -9,9 +9,9 @@ Only auth and monitor views are implemented. Events is still stubbed out.
 
 ## Experiences from this effort
 
-* I code using both copilot (agent mode + claude 3.5 and 3.7) and windsurf. Windsurf is better in my experiments, by a large margin.
+* I code using both copilot (agent mode + claude 3.5 and 3.7) and windsurf. **Windsurf is better in my experiments, by a large margin.**
 
-* I spent 2 days trying two approaches. Approach 1 was to write a detailed PRD on how the app should function, including how to use the APIs, how to layout screens, functional and non functional requirements. The output _looked_ impressive, but it was a nightmare to actually make it work. Between fixing build dependencies, getting the UI to look right, and getting the API to work, I was spending most of my time debugging and fixing issues. I finally gave up after one day. Windsurf kept making changes that broke other things. It finally got to a point where windsurf asked me to remove and reinstall flutter and all packages. That is when I killed the project. 
+* I spent 2 days trying two approaches. Approach 1 was to write a detailed PRD on how the app should function, including how to use the APIs, how to layout screens, functional and non functional requirements. The output _looked_ impressive, but it was a nightmare to actually make it work. Between fixing build dependencies,getting the API to work and trying to figure out how one change was breaking many other views,  I was spending most of my time debugging and fixing issues. I finally gave up after one day. Windsurf kept making changes that broke other things. It finally got to a point where windsurf asked me to remove and reinstall flutter and all packages. I told it 'No, flutter works great on other projects' and it said 'Ah! That is very important information' and proceeded to list another set of things that I knew won't work. That is when I killed the project. 
 
 * I then reverted my approach to actually take baby steps. This approach worked much better as I was able to guide it step by step. This is the prompt I eventually used that worked the best:
 
@@ -24,15 +24,14 @@ c) An events view that will show all camera events
 For now, mock the screens. Make sure the code is well documented and each view has its own file
 ```
 
-From then, I had to spend 3-4 hours to keep tweaking it and it finally worked. Given I am not a flutter developer, this approach helped me. If I was familiar with flutter, I might have been faster developing the app. I am not sure.
+From then, I had to spend 3-4 hours to keep tweaking it via prompts and it finally worked. Given I am not a flutter developer, this approach helped me. If I was familiar with flutter, I might have been faster developing the app. I am not sure. 
 
 
 * The process was both fun and frustrating. It was wonderful to see windsurf apply its agents and tools to create my directories, run code, analyze output and try to auto fix them. The flow was seamless - that is the power of agents and tools. That being said, when you look beyond the surface and stop being amazed at how it automates steps, you come to the conclusion this is like taking a very inexperienced developer with access to, say, stackoverflow through building an app. Windsurf would continously make confident changes that would'nt work, then extract error logs and try to fix them. **That makes sense - the "reasoning" part of most of these tools is the most underdeveloped. They are good at taking a problem statement and trying to fix it. Therefore, the problem needs to occur for them to know how to fix it.** (This is also why its fascinating to see it create and self fix, which is a great thing to watch unfold, but eventually wastes a lot of time) This is unlike a seasoned developer who can implement reasoning and logic from the start. The entire experience was similar to starting to past code from elsewhere and debugging our way towards fixing it for the most part.
 
-* That being said, I was particularly impressed by its problem solving skills for specific areas. This project requires viewing MJPEG streams. As simple as that requirement is, it is hard to implement in flutter for the desktop (google for this problem). The gist of the problem is that MJPEG is a continuous stream of images, that never stops. Therefore, if you do an http get, it will never stop receiving data. I had to hint it a bit to look at a modified http dart implementation that implemented HTTP FETCH and it figured out its existing `Image.Network` widget wouldn't work because it used an older http stack. It then proceeded to implement its own MJPEG widget to overcome this issue. That impressed me. That being said, the code still doesn't work. If you change the `getStreamUrl` function in `zoneminder_service.dart` to change `mode=jpeg` to `mode=single` it displays the image, but the current implementation of its custom MJPEG class (`mjpeg_view.dart`) terminates the stream prematurely. It was funny though, that it finally suggested I replace streaming MJPEG with a single photo to make it work. Bad bot, smart bot :-))
+* That being said, I was particularly impressed by its problem solving skills for specific areas. This project requires viewing MJPEG streams. As simple as that requirement is, it is hard to implement in flutter for the desktop (google for this problem). The gist of the problem is that MJPEG is a continuous stream of images, that never stops. Therefore, if you do an http get, it will never stop receiving data. I had to hint it a bit to look at a modified http dart implementation that implemented HTTP FETCH and it figured out its existing `Image.Network` widget wouldn't work because it used an older http stack. It then proceeded to implement its own MJPEG widget to overcome this issue. That impressed me. That being said, the code still doesn't work. If you change the `getStreamUrl` function in `zoneminder_service.dart` to change `mode=jpeg` to `mode=single` it displays the image, but the current implementation of its custom MJPEG class (`mjpeg_view.dart`) terminates the stream prematurely. It was funny though, that it finally suggested I replace streaming MJPEG with a single photo to make it work. Sneaky bot :-))
 
 ![](images/funny.png?raw=true)
-
 
 
 # Conclusion
@@ -40,6 +39,9 @@ From then, I had to spend 3-4 hours to keep tweaking it and it finally worked. G
 2. Starting small and incrementally building the app worked much better
 3. Being super specific helps, but almost to a point that you have to be the guiding expert
 4. The agents work better by creating problems and then trying to fix them (takes a lot of time though, but it eventuall gets there)
+5. There is a solid place for these tools. They get you started reasonably well, but don't go overboard. You still need to be the "expert" and you still need to know when these tools go for a loop (not kidding)! 
+6. They are good at solving contained jobs. 
+7. They are _very_ _very_ _very_ far from being you
 
 ## Building the Project
 
