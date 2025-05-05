@@ -238,33 +238,90 @@ class _EventsViewState extends State<EventsView> {
                       }
                     }
 
+                    final eventId = eventData['Id'] as int?;
+                    final zmService = Provider.of<ZoneMinderService>(context, listen: false);
+                    
                     return Card(
                       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      child: ListTile(
-                        leading: const Icon(Icons.video_library),
-                        title: Text(monitorName),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (eventData['Id'] != null)
-                              Text('Event ID: ${eventData['Id']}'),
-                            if (eventData['Cause'] != null && (eventData['Cause'] as String).isNotEmpty)
-                              Text('Cause: ${eventData['Cause']}'),
-                            if (eventData['StartTime'] != null)
-                              Text('Start: ${eventData['StartTime']}'),
-                            if (duration != 'N/A')
-                              Text('Duration: $duration'),
-                            if (eventData['DefaultVideo'] != null)
-                              Text('Video: ${eventData['DefaultVideo']}'),
-                            if (eventData['Frames'] != null)
-                              Text('Frames: ${eventData['Frames']} (${eventData['AlarmFrames'] ?? 0} alarm)'),
-                            if (eventData['Notes'] != null && (eventData['Notes'] as String).isNotEmpty)
-                              Text('Notes: ${eventData['Notes']}'),
-                          ].whereType<Widget>().toList(),
-                        ),
+                      child: InkWell(
                         onTap: () {
                           // TODO: Navigate to event details
                         },
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Thumbnail
+                              if (eventId != null)
+                                Container(
+                                  width: 100,
+                                  height: 75,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[200],
+                                    borderRadius: BorderRadius.circular(4),
+                                    image: DecorationImage(
+                                      image: NetworkImage(
+                                        zmService.getEventThumbnailUrl(eventId),
+                                      ),
+                                      fit: BoxFit.cover,
+                                      onError: (exception, stackTrace) {
+                                        // Handle image loading errors
+                                      },
+                                    ),
+                                  ),
+                                )
+                              else
+                                Container(
+                                  width: 100,
+                                  height: 75,
+                                  color: Colors.grey[200],
+                                  child: const Icon(Icons.image_not_supported, size: 40, color: Colors.grey),
+                                ),
+                              
+                              const SizedBox(width: 12),
+                              
+                              // Event details
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      monitorName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    if (eventData['Cause'] != null && (eventData['Cause'] as String).isNotEmpty)
+                                      Text(
+                                        '${eventData['Cause']}',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                    if (eventData['StartTime'] != null)
+                                      Text(
+                                        '${eventData['StartTime']}'
+                                            .replaceFirst('T', ' ')
+                                            .replaceFirst(RegExp(r'\.\d+'), ''),
+                                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                      ),
+                                    if (duration != 'N/A')
+                                      Text(
+                                        'Duration: $duration',
+                                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                      ),
+                                    if (eventData['Frames'] != null)
+                                      Text(
+                                        'Frames: ${eventData['Frames']} (${eventData['AlarmFrames'] ?? 0} alarm)',
+                                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                      ),
+                                  ].whereType<Widget>().toList(),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     );
                   } catch (e) {

@@ -345,6 +345,27 @@ class ZoneMinderService extends ChangeNotifier {
 
   bool get isAuthenticated => _accessToken != null;
 
+  /// Generates a URL for an event thumbnail
+  /// 
+  /// The format is: base_url/index.php?eid=<event_id>&fid=snapshot&view=image&width=200&height=125
+  String getEventThumbnailUrl(int eventId, {int width = 200, int height = 125}) {
+    final params = {
+      'eid': eventId.toString(),
+      'fid': 'snapshot',
+      'view': 'image',
+      'width': width.toString(),
+      'height': height.toString(),
+    };
+    
+    // Add token if authenticated
+    if (_accessToken != null && _accessToken != 'noauth') {
+      params['token'] = _accessToken!;
+    }
+    
+    final query = Uri(queryParameters: params).query;
+    return '$_baseUrl/index.php?$query';
+  }
+
   /// Formats a DateTime to the format expected by ZoneMinder API (YYYY-MM-DD HH:MM:SS)
   String _formatDateTime(DateTime dateTime) {
     final year = dateTime.year.toString().padLeft(4, '0');
