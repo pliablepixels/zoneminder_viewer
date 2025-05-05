@@ -16,29 +16,29 @@ Only auth and monitor views are implemented. Events is still stubbed out.
 * I spent 2 days trying two approaches. 
    * Approach 1 was to write a detailed PRD on how the app should function, including how to use the APIs, how to layout screens, functional and non functional requirements. The output _looked_ impressive, but it was a nightmare to actually make it work. Between fixing build dependencies,getting the API to work and trying to figure out how one change was breaking many other views,  it was a never ending loop of problems. Windsurf kept making changes that broke other things. It finally got to a point where windsurf asked me to remove and reinstall flutter and all related packages as the 'right fix'. I told it 'No, flutter works great on other projects' and it said 'Ah! That is very important information' and proceeded to list another set of things that I knew won't work. That is when I killed this approach. 
 
-* I then reverted my approach to actually take baby steps. This approach worked much better as I was able to guide it step by step. This is the prompt I eventually used that worked the best:
+   * Approach 2: I then reverted my approach to actually take baby steps. This approach worked much better as I was able to guide it step by step. This is the prompt I eventually used that worked the best:
 
-```
-Create a flutter application that will run in iOS, Android, Linux and macOS. I will give you more instructions later, but right now make sure the app has:
-a) A wizard view that lets a user enter a ZoneMinder URL and credentials (make sure the URL input is sanitized to add any missing components like scheme)
-b) A monitor view that will show all the cameras in a montage
-c) An events view that will show all camera events
+   ```
+   Create a flutter application that will run in iOS, Android, Linux and macOS. I will give you more instructions later, but right now make sure the app has:
+   a) A wizard view that lets a user enter a ZoneMinder URL and credentials (make sure the URL input is sanitized to add any missing components like scheme)
+   b) A monitor view that will show all the cameras in a montage
+   c) An events view that will show all camera events
 
-For now, mock the screens. Make sure the code is well documented and each view has its own file
-```
+   For now, mock the screens. Make sure the code is well documented and each view has its own file
+   ```
 
-From then, I had to spend 3-4 hours to keep tweaking it via prompts and it finally worked. Given I am not a flutter developer, this approach helped me. If I was familiar with flutter, I might have been faster developing the app. I am not sure. 
+   From then, I had to spend 3-4 hours to keep tweaking it via prompts and it finally worked. Given I am not a flutter developer, this approach helped me. If I was familiar with flutter, I might have been faster developing the app. I am not sure. 
 
 
 * The process was both fun and frustrating. It was wonderful to see windsurf apply its agents and tools to create my directories, run code, analyze output and try to auto fix them. The flow was seamless - that is the power of agents and tools. That being said, when you look beyond the surface and stop being amazed at how it automates steps, you come to the conclusion this is like taking a very inexperienced developer with access to, say, stackoverflow through building an app. Windsurf would continously make confident changes that wouldn't work, then extract error logs and try to fix them. **That makes sense - the "reasoning" part of most of these tools is the most underdeveloped. They are good at taking a problem statement and trying to fix it. Therefore, the problem needs to occur for them to know how to fix it.** (This is also why it's fascinating to see it create bad code and self fix, which is a great thing to watch unfold, but eventually wastes a lot of time) This is unlike a seasoned developer who can implement reasoning and logic from the start. The entire experience was similar to starting to paste code from elsewhere and debugging our way towards fixing it for the most part.
 
 * That being said, I was particularly impressed by its problem solving skills for specific areas. This project requires viewing MJPEG streams. As simple as that requirement is, it is hard to implement in flutter for the desktop (google for this problem). The gist of the problem is that MJPEG is a continuous stream of images, that never stops. Therefore, if you do an http get, it will never stop receiving data. I had to hint it a bit to look at a modified http dart implementation that implemented HTTP FETCH and it figured out its existing `Image.Network` widget wouldn't work because it used an older http stack. It then proceeded to implement its own MJPEG widget to overcome this issue. That impressed me.
 
-
 ![](images/mjpegsolving.png?raw=true)
 
+ However, it never was able to solve via a custom MJPEG class. I finally reverted to WkWebView to display the MJPEG stream and that worked. I don't know if this will cause memory issues later as I've not had good experiences with memory being released when you change views in a browser object.
 
- That being said, the code still doesn't work. If you change the `getStreamUrl` function in `zoneminder_service.dart` to change `mode=jpeg` to `mode=single` it displays the image, but the current implementation of its custom MJPEG class (`mjpeg_view.dart`) terminates the stream prematurely. It was funny though, that it finally suggested I replace streaming MJPEG with a single photo to make it work. Sneaky bot :-))
+The funny part was somewhere along the way, it suggested I replace streaming MJPEG with a single photo to make it work. Sneaky bot :-))
 
 ![](images/funny.png?raw=true)
 
