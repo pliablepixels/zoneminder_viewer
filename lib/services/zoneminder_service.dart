@@ -3,8 +3,9 @@ import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:logging/logging.dart';
+import 'package:flutter/foundation.dart';
 
-class ZoneMinderService {
+class ZoneMinderService extends ChangeNotifier {
   static final Logger _logger = Logger('ZoneMinderService');
   static const String _baseUrlKey = 'zoneminder_base_url';
   static const String _accessTokenKey = 'zoneminder_access_token';
@@ -49,26 +50,45 @@ class ZoneMinderService {
   }
 
   Future<Map<String, String>> _getHeaders() async {
-    final headers = {
+    final token = await getValidToken();
+    return {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
     };
+  }
+
+  Future<http.Response> _makeAuthenticatedRequest(
+    Future<http.Response> Function() requestFn,
+  ) async {
+    // Make the initial request
+    var response = await requestFn();
     
-    final token = await getValidToken();
-    if (token != null) {
-      headers['Authorization'] = 'Bearer $token';
-      _logger.fine('Added authorization header with token');
+    // If unauthorized, try to refresh the token and retry once
+    if (response.statusCode == 401) {
+      _logger.info('Token expired, attempting to refresh...');
+      
+      // Try to refresh the token
+      final refreshed = await _refreshTokenIfAvailable();
+      
+      if (refreshed) {
+        _logger.info('Token refreshed, retrying request...');
+        // Retry the request with the new token
+        return await requestFn();
+      } else {
+        _logger.warning('Failed to refresh token, user needs to log in again');
+        // If we can't refresh, log out the user
+        await logout();
+      }
     }
-    _logger.fine('Request headers: $headers');
-    return headers;
+    
+    return response;
   }
 
   Future<Map<String, dynamic>> login(String username, String password) async {
-    _logger.info('Attempting login with username: $username');
-    _logger.fine('API URL: $_apiUrl');
+    _logger.info('Attempting login for user: $username');
     
     try {
-      _logger.fine('Making login request...');
       final response = await http.post(
         Uri.parse('$_apiUrl/host/login.json'),
         headers: await _getHeaders(),
@@ -95,6 +115,7 @@ class ZoneMinderService {
           _accessToken = token;
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString(_accessTokenKey, token);
+          notifyListeners();
           
           return data;
         } else {
@@ -105,11 +126,24 @@ class ZoneMinderService {
         _logger.severe('Login failed: ${response.statusCode} - ${response.body}');
         throw Exception('Login failed: ${response.statusCode}');
       }
-      throw Exception('Login failed: ${response.statusCode}');
     } catch (e) {
       _logger.severe('Login error: $e');
       rethrow;
     }
+  }
+
+  /// Logs out the current user by clearing authentication tokens
+  Future<void> logout() async {
+    _logger.info('Logging out...');
+    _accessToken = null;
+    _refreshToken = null;
+    
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_accessTokenKey);
+    await prefs.remove(_refreshTokenKey);
+    
+    notifyListeners();
+    _logger.info('Successfully logged out');
   }
 
   Future<List<Map<String, dynamic>>> getMonitors() async {
@@ -154,9 +188,10 @@ class ZoneMinderService {
   }
 
   Future<void> setBaseUrl(String url) async {
-    _baseUrl = _sanitizeUrl(url);
+    _baseUrl = url;
     _apiUrl = _sanitizeUrl('$_baseUrl/api');
     _logger.info('Base URL updated to: $_baseUrl');
+    notifyListeners();
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_baseUrlKey, _baseUrl);
@@ -217,12 +252,12 @@ class ZoneMinderService {
     if (_refreshToken == null) return false;
     
     try {
-      _logger.info('Attempting to refresh access token');
+      _logger.info('Attempting to refresh token...');
+      
       final response = await http.post(
-        Uri.parse('$_apiUrl/host/login.json'),
+        Uri.parse('$_apiUrl/token/refresh'),
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
           'Authorization': 'Bearer $_refreshToken',
         },
       );
@@ -231,12 +266,20 @@ class ZoneMinderService {
         final data = jsonDecode(response.body);
         if (data['token'] != null) {
           _accessToken = data['token'] as String;
+          _refreshToken = data['refreshToken'] as String?;
+          _logger.info('Tokens updated');
+          notifyListeners();
+
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString(_accessTokenKey, _accessToken!);
-          _logger.info('Successfully refreshed access token');
+          if (_refreshToken != null) {
+            await prefs.setString(_refreshTokenKey, _refreshToken!);
+          }
           return true;
         }
       }
+      
+      _logger.warning('Failed to refresh token: ${response.statusCode}');
       return false;
     } catch (e) {
       _logger.severe('Error refreshing token: $e');
@@ -245,4 +288,103 @@ class ZoneMinderService {
   }
 
   bool get isAuthenticated => _accessToken != null;
+
+  /// Fetches recent events from ZoneMinder
+  Future<List<Map<String, dynamic>>> getEvents({
+    int limit = 50,
+    DateTime? from,
+    DateTime? to,
+    List<int>? monitorIds,
+  }) async {
+    _logger.info('Fetching events with limit: $limit');
+    
+    try {
+      // Build query parameters
+      final params = <String, String>{
+        'limit': limit.toString(),
+        'sort': 'StartTime',
+        'direction': 'desc',
+      };
+
+      if (from != null) {
+        params['from'] = from.toUtc().toIso8601String();
+      }
+      if (to != null) {
+        params['to'] = to.toUtc().toIso8601String();
+      }
+      if (monitorIds != null && monitorIds.isNotEmpty) {
+        params['monitor_ids'] = monitorIds.join(',');
+      }
+
+      final uri = Uri.parse('$_apiUrl/events.json').replace(
+        queryParameters: params,
+      );
+
+      final headers = await _getHeaders();
+      final response = await _makeAuthenticatedRequest(
+        () => http.get(uri, headers: headers),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is Map<String, dynamic> && data.containsKey('events')) {
+          final events = data['events'] as List<dynamic>;
+          _logger.info('Retrieved ${events.length} events');
+          return events.cast<Map<String, dynamic>>();
+        } else {
+          _logger.severe('Unexpected response format: $data');
+          throw Exception('Unexpected response format from ZoneMinder API');
+        }
+      } else {
+        _logger.severe('Failed to fetch events: ${response.statusCode} - ${response.body}');
+        throw Exception('Failed to fetch events: ${response.statusCode}');
+      }
+    } catch (e) {
+      _logger.severe('Error fetching events: $e');
+      rethrow;
+    }
+  }
+
+  /// Fetches a map of monitor IDs to monitor details
+  Future<Map<int, Map<String, dynamic>>> getMonitorsMap() async {
+    final monitors = await getMonitors();
+    final map = <int, Map<String, dynamic>>{};
+    
+    for (final monitor in monitors) {
+      if (monitor['Monitor'] is Map<String, dynamic>) {
+        final monitorData = monitor['Monitor'] as Map<String, dynamic>;
+        final id = monitorData['Id'] as int?;
+        if (id != null) {
+          map[id] = monitorData;
+        }
+      }
+    }
+    
+    return map;
+  }
+
+  /// Gets the monitor name by ID
+  Future<String> getMonitorName(int monitorId) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await _makeAuthenticatedRequest(
+        () => http.get(
+          Uri.parse('$_apiUrl/monitors/$monitorId.json'),
+          headers: headers,
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is Map<String, dynamic> && data.containsKey('monitor')) {
+          final monitor = data['monitor'] as Map<String, dynamic>;
+          return monitor['Name'] as String? ?? 'Monitor $monitorId';
+        }
+      }
+      return 'Monitor $monitorId';
+    } catch (e) {
+      _logger.warning('Failed to get monitor name: $e');
+      return 'Monitor $monitorId';
+    }
+  }
 }

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'services/zoneminder_service.dart';
 import 'views/wizard_view.dart';
 import 'views/monitor_view.dart';
-import 'views/events_view.dart';
+import 'views/events_view_new.dart' show EventsView;
 
 void main() {
   // Initialize logging with enhanced output
@@ -63,7 +64,7 @@ class _ZoneMinderAppState extends State<ZoneMinderApp> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const MaterialApp(
+      return MaterialApp(
         home: Scaffold(
           body: Center(
             child: CircularProgressIndicator(),
@@ -72,37 +73,40 @@ class _ZoneMinderAppState extends State<ZoneMinderApp> {
       );
     }
 
-    return MaterialApp(
-      title: 'ZoneMinder Viewer',
-      theme: ThemeData(
-        colorScheme: ColorScheme.dark(
-          primary: const Color(0xFF4A5568),
-          secondary: const Color(0xFF2D3748),
-          background: const Color(0xFF1A202C),
-          surface: const Color(0xFF2D3748),
-          onPrimary: Colors.white,
-          onSecondary: Colors.white,
-          onBackground: Colors.white,
-          onSurface: Colors.white,
+    return ChangeNotifierProvider<ZoneMinderService>.value(
+      value: _zmService,
+      child: MaterialApp(
+        title: 'ZoneMinder Viewer',
+        theme: ThemeData(
+          colorScheme: ColorScheme.dark(
+            primary: const Color(0xFF4A5568),
+            secondary: const Color(0xFF2D3748),
+            background: const Color(0xFF1A202C),
+            surface: const Color(0xFF2D3748),
+            onPrimary: Colors.white,
+            onSecondary: Colors.white,
+            onBackground: Colors.white,
+            onSurface: Colors.white,
+          ),
+          useMaterial3: true,
+          scaffoldBackgroundColor: const Color(0xFF1A202C),
+          cardTheme: const CardThemeData(
+            color: Color(0xFF2D3748),
+            elevation: 4,
+          ),
         ),
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFF1A202C),
-        cardTheme: const CardThemeData(
-          color: Color(0xFF2D3748),
-          elevation: 4,
+        home: _isLoggedIn 
+          ? const HomeScreen()
+          : const WizardView(),
+        onGenerateRoute: (settings) {
+          if (settings.name == '/wizard') {
+            return MaterialPageRoute(builder: (context) => const WizardView());
+          }
+          return null;
+        },
+        onUnknownRoute: (settings) => MaterialPageRoute(
+          builder: (context) => _isLoggedIn ? const HomeScreen() : const WizardView(),
         ),
-      ),
-      home: _isLoggedIn 
-        ? const HomeScreen()
-        : const WizardView(),
-      onGenerateRoute: (settings) {
-        if (settings.name == '/wizard') {
-          return MaterialPageRoute(builder: (context) => const WizardView());
-        }
-        return null;
-      },
-      onUnknownRoute: (settings) => MaterialPageRoute(
-        builder: (context) => _isLoggedIn ? const HomeScreen() : const WizardView(),
       ),
     );
   }
@@ -129,10 +133,10 @@ class _HomeScreenState extends State<HomeScreen> {
     _selectedIndex = widget.initialIndex;
   }
   
-  final List<Widget> _widgetOptions = [
+  List<Widget> _buildWidgetOptions(ZoneMinderService zmService) => [
     const WizardView(),
     const MonitorView(),
-    const EventsView(),
+    EventsView(zmService: zmService),
   ];
 
   void _onItemTapped(int index) {
@@ -144,12 +148,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final zmService = Provider.of<ZoneMinderService>(context, listen: false);
     return Scaffold(
       appBar: AppBar(
         title: const Text('ZoneMinder Viewer'),
         backgroundColor: Colors.grey[900],
       ),
-      body: _widgetOptions[_selectedIndex],
+      body: _buildWidgetOptions(zmService)[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         items: const [
           BottomNavigationBarItem(

@@ -38,6 +38,7 @@ dependencies:
   shared_preferences: ^2.2.0
   logging: ^1.0.28
   webview_flutter: ^4.4.2
+  provider: ^6.1.2
   
   # Platform specific implementations
   webview_flutter_android: ^3.10.2
