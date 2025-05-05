@@ -7,7 +7,8 @@ This is a reasonably simple app (well, no longer! Just added events view!), - it
 
 Only auth and monitor views are implemented. Events is still stubbed out.
 
-![](images/project.png?raw=true)
+![](images/project1.png?raw=true)
+![](images/project2.png?raw=true)
 
 ## Experiences from this effort
 
