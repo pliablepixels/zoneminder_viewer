@@ -53,9 +53,11 @@ class ZoneMinderService {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     };
-    if (_accessToken != null) {
-      headers['Authorization'] = 'Bearer $_accessToken';
-      _logger.fine('Adding authorization header with token');
+    
+    final token = await getValidToken();
+    if (token != null) {
+      headers['Authorization'] = 'Bearer $token';
+      _logger.fine('Added authorization header with token');
     }
     _logger.fine('Request headers: $headers');
     return headers;
@@ -141,13 +143,13 @@ class ZoneMinderService {
     }
   }
 
-  String getStreamUrl(int monitorId) {
+  Future<String> getStreamUrl(int monitorId) async {
     if (monitorId <= 0) {
       throw ArgumentError('Invalid monitor ID: $monitorId');
     }
     final random = Random();
     final connKey = random.nextInt(1000000);
-    final token = _accessToken ?? 'noauth';
+    final token = await getValidToken() ?? 'noauth';
     return '$_baseUrl/cgi-bin/nph-zms?mode=single&monitor=$monitorId&scale=100&maxfps=5&buffer=1000&rand=$connKey&auth=$token';
   }
 
@@ -166,6 +168,25 @@ class ZoneMinderService {
 
   String get apiUrl => _apiUrl;
 
+  // Get the current access token, refreshing it if necessary
+  Future<String?> getValidToken() async {
+    if (_accessToken == null) return null;
+    
+    // Check if token is still valid
+    if (await isTokenValid()) {
+      return _accessToken;
+    }
+    
+    // Try to refresh the token
+    try {
+      await _refreshTokenIfAvailable();
+      return _accessToken;
+    } catch (e) {
+      _logger.warning('Failed to refresh token: $e');
+      return null;
+    }
+  }
+
   /// Checks if the current token is valid by making a test API call
   Future<bool> isTokenValid() async {
     if (_accessToken == null) return false;
@@ -173,7 +194,11 @@ class ZoneMinderService {
     try {
       final response = await http.get(
         Uri.parse('$_apiUrl/host/getVersion.json'),
-        headers: await _getHeaders(),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          if (_accessToken != null) 'Authorization': 'Bearer $_accessToken',
+        },
       );
       
       if (response.statusCode == 200) {
@@ -183,6 +208,38 @@ class ZoneMinderService {
       return false;
     } catch (e) {
       _logger.warning('Token validation failed: $e');
+      return false;
+    }
+  }
+
+  // Attempt to refresh the access token if a refresh token is available
+  Future<bool> _refreshTokenIfAvailable() async {
+    if (_refreshToken == null) return false;
+    
+    try {
+      _logger.info('Attempting to refresh access token');
+      final response = await http.post(
+        Uri.parse('$_apiUrl/host/login.json'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $_refreshToken',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['token'] != null) {
+          _accessToken = data['token'] as String;
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(_accessTokenKey, _accessToken!);
+          _logger.info('Successfully refreshed access token');
+          return true;
+        }
+      }
+      return false;
+    } catch (e) {
+      _logger.severe('Error refreshing token: $e');
       return false;
     }
   }

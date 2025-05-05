@@ -7,7 +7,7 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
 class MjpegView extends StatefulWidget {
-  final String streamUrl;
+  final Future<String> streamUrl;
   final BoxFit fit;
 
   const MjpegView({
@@ -28,63 +28,79 @@ class _MjpegViewState extends State<MjpegView> {
   @override
   void initState() {
     super.initState();
-    _initializeWebView();
+    _loadStreamUrl();
+  }
+  
+  @override
+  void didUpdateWidget(MjpegView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.streamUrl != widget.streamUrl) {
+      _loadStreamUrl();
+    }
   }
 
-  void _initializeWebView() {
-    // Create platform-specific controller
-    late final PlatformWebViewControllerCreationParams params;
-    
-    // Configure for WKWebView on iOS/macOS
-    if (WebViewPlatform.instance is WebKitWebViewPlatform) {
-      params = WebKitWebViewControllerCreationParams(
-        allowsInlineMediaPlayback: true,
-        mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
-      );
-    } else {
-      params = const PlatformWebViewControllerCreationParams();
-    }
-
-    // Create the WebViewController
-    _controller = WebViewController.fromPlatformCreationParams(params);
-    
-    // Configure common settings
-    _controller
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageStarted: (String url) {
-            if (mounted) {
-              setState(() => _isLoading = true);
-            }
-          },
-          onPageFinished: (String url) {
-            if (mounted) {
-              setState(() => _isLoading = false);
-            }
-          },
-          onWebResourceError: (error) {
-            if (mounted) {
-              setState(() {
-                _error = 'Failed to load stream: ${error.description}';
-                _isLoading = false;
-              });
-            }
-          },
-        ),
-      );
-
-    // Platform specific configurations
-    if (_controller.platform is AndroidWebViewController) {
-      AndroidWebViewController.enableDebugging(true);
-      final androidController = _controller.platform as AndroidWebViewController;
-      androidController.setMediaPlaybackRequiresUserGesture(false);
-    }
-
+  Future<void> _loadStreamUrl() async {
     try {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+      
+      final url = await widget.streamUrl;
+      if (!mounted) return;
+      
+      // Create platform-specific controller
+      late final PlatformWebViewControllerCreationParams params;
+      
+      // Configure for WKWebView on iOS/macOS
+      if (WebViewPlatform.instance is WebKitWebViewPlatform) {
+        params = WebKitWebViewControllerCreationParams(
+          allowsInlineMediaPlayback: true,
+          mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
+        );
+      } else {
+        params = const PlatformWebViewControllerCreationParams();
+      }
+
+      // Create the WebViewController
+      final controller = WebViewController.fromPlatformCreationParams(params);
+      
+      // Configure common settings
+      controller
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onPageStarted: (String url) {
+              if (mounted) {
+                setState(() => _isLoading = true);
+              }
+            },
+            onPageFinished: (String url) {
+              if (mounted) {
+                setState(() => _isLoading = false);
+              }
+            },
+            onWebResourceError: (error) {
+              if (mounted) {
+                setState(() {
+                  _error = 'Failed to load stream: ${error.description}';
+                  _isLoading = false;
+                });
+              }
+            },
+          ),
+        );
+
+      // Platform specific configurations
+      if (controller.platform is AndroidWebViewController) {
+        AndroidWebViewController.enableDebugging(true);
+        final androidController = controller.platform as AndroidWebViewController;
+        androidController.setMediaPlaybackRequiresUserGesture(false);
+      }
+
       // For web platform, we need to use an iframe to properly handle the MJPEG stream
       if (kIsWeb) {
-        _controller.loadHtmlString('''
+        await controller.loadHtmlString('''
           <!DOCTYPE html>
           <html>
           <head>
@@ -95,13 +111,20 @@ class _MjpegViewState extends State<MjpegView> {
             </style>
           </head>
           <body>
-            <img src="${widget.streamUrl}" />
+            <img src="$url" />
           </body>
           </html>
         ''');
       } else {
-        // For desktop/mobile, use the direct URL
-        _controller.loadRequest(Uri.parse(widget.streamUrl));
+        // For mobile platforms, load the URL directly
+        await controller.loadRequest(Uri.parse(url));
+      }
+      
+      if (mounted) {
+        setState(() {
+          _controller = controller;
+          _isLoading = false;
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -125,18 +148,18 @@ class _MjpegViewState extends State<MjpegView> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     if (_error != null) {
       return Center(
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.error_outline, color: Colors.red, size: 48),
             const SizedBox(height: 16),
-            Text(
-              _error!,
-              style: const TextStyle(color: Colors.red),
-              textAlign: TextAlign.center,
-            ),
+            Text(_error!),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () {
@@ -145,19 +168,13 @@ class _MjpegViewState extends State<MjpegView> {
                     _error = null;
                     _isLoading = true;
                   });
-                  _initializeWebView();
+                  _loadStreamUrl();
                 }
               },
               child: const Text('Retry'),
             ),
           ],
         ),
-      );
-    }
-
-    if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
       );
     }
 

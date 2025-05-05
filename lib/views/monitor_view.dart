@@ -112,17 +112,33 @@ class _MonitorViewState extends State<MonitorView> {
           );
         }
         
+        // Get the stream URL as a Future<String>
         final streamUrl = _zoneminderService.getStreamUrl(monitorId);
-        debugPrint('Stream URL: $streamUrl');
+        debugPrint('Stream URL requested for monitor $monitorId');
 
         return Card(
           elevation: 4,
           child: Stack(
             fit: StackFit.expand,
             children: [
-              MjpegView(
-                streamUrl: streamUrl,
-                fit: BoxFit.cover,
+              FutureBuilder<String>(
+                future: streamUrl,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  } else if (snapshot.hasError) {
+                    return Center(
+                      child: Text('Error loading stream: ${snapshot.error}'),
+                    );
+                  } else if (snapshot.hasData) {
+                    return MjpegView(
+                      streamUrl: Future.value(snapshot.data!),
+                      fit: BoxFit.cover,
+                    );
+                  } else {
+                    return const Center(child: Text('No stream available'));
+                  }
+                },
               ),
               Positioned(
                 bottom: 0,
