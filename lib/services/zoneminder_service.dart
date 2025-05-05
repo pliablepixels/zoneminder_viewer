@@ -162,9 +162,30 @@ class ZoneMinderService {
 
   String get baseUrl => _baseUrl;
 
-  String get accessToken => _accessToken ?? 'noauth';
+  String? get accessToken => _accessToken;
 
   String get apiUrl => _apiUrl;
+
+  /// Checks if the current token is valid by making a test API call
+  Future<bool> isTokenValid() async {
+    if (_accessToken == null) return false;
+    
+    try {
+      final response = await http.get(
+        Uri.parse('$_apiUrl/host/getVersion.json'),
+        headers: await _getHeaders(),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['version'] != null;
+      }
+      return false;
+    } catch (e) {
+      _logger.warning('Token validation failed: $e');
+      return false;
+    }
+  }
 
   bool get isAuthenticated => _accessToken != null;
 }

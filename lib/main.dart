@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'services/zoneminder_service.dart';
 import 'views/wizard_view.dart';
 import 'views/monitor_view.dart';
 import 'views/events_view.dart';
@@ -14,22 +16,70 @@ void main() {
     debugPrint('$time $level [${record.loggerName}] ${record.message}');
   });
 
-  runApp(const MyApp());
+  runApp(const ZoneMinderApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class ZoneMinderApp extends StatefulWidget {
+  const ZoneMinderApp({super.key});
+
+  @override
+  State<ZoneMinderApp> createState() => _ZoneMinderAppState();
+}
+
+class _ZoneMinderAppState extends State<ZoneMinderApp> {
+  final ZoneMinderService _zmService = ZoneMinderService();
+  bool _isLoading = true;
+  bool _isLoggedIn = false;
+  static final Logger _logger = Logger('ZoneMinderApp');
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAuthStatus();
+  }
+
+  Future<void> _checkAuthStatus() async {
+    try {
+      await _zmService.initialize();
+      final prefs = await SharedPreferences.getInstance();
+      final hasToken = prefs.getString('zoneminder_access_token') != null;
+      
+      if (mounted) {
+        setState(() {
+          _isLoggedIn = hasToken && _zmService.isAuthenticated;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      _logger.severe('Error checking auth status: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: CircularProgressIndicator(),
+          ),
+        ),
+      );
+    }
+
     return MaterialApp(
       title: 'ZoneMinder Viewer',
       theme: ThemeData(
         colorScheme: ColorScheme.dark(
-          primary: const Color(0xFF4A5568),  // Slate primary
-          secondary: const Color(0xFF2D3748), // Dark slate
-          background: const Color(0xFF1A202C), // Dark background
-          surface: const Color(0xFF2D3748), // Slate surface
+          primary: const Color(0xFF4A5568),
+          secondary: const Color(0xFF2D3748),
+          background: const Color(0xFF1A202C),
+          surface: const Color(0xFF2D3748),
           onPrimary: Colors.white,
           onSecondary: Colors.white,
           onBackground: Colors.white,
@@ -42,36 +92,43 @@ class MyApp extends StatelessWidget {
           elevation: 4,
         ),
       ),
-      home: const HomeScreen(),
+      home: _isLoggedIn 
+        ? const HomeScreen()
+        : const WizardView(),
       onGenerateRoute: (settings) {
-        switch (settings.name) {
-          case '/':
-          case '/wizard':
-            return MaterialPageRoute(builder: (context) => const WizardView());
-          case '/monitors':
-            return MaterialPageRoute(builder: (context) => const MonitorView());
-          case '/events':
-            return MaterialPageRoute(builder: (context) => const EventsView());
-          default:
-            return MaterialPageRoute(builder: (context) => const WizardView());
+        if (settings.name == '/wizard') {
+          return MaterialPageRoute(builder: (context) => const WizardView());
         }
+        return null;
       },
-      onUnknownRoute: (settings) {
-        return MaterialPageRoute(builder: (context) => const WizardView());
-      },
+      onUnknownRoute: (settings) => MaterialPageRoute(
+        builder: (context) => _isLoggedIn ? const HomeScreen() : const WizardView(),
+      ),
     );
   }
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final int initialIndex;
+  
+  const HomeScreen({
+    super.key,
+    this.initialIndex = 1, // Default to monitors view
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _selectedIndex = 0;
+  late int _selectedIndex;
+  
+  @override
+  void initState() {
+    super.initState();
+    _selectedIndex = widget.initialIndex;
+  }
+  
   final List<Widget> _widgetOptions = [
     const WizardView(),
     const MonitorView(),
@@ -84,9 +141,14 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('ZoneMinder Viewer'),
+        backgroundColor: Colors.grey[900],
+      ),
       body: _widgetOptions[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         items: const [

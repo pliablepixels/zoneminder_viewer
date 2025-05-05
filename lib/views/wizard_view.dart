@@ -35,45 +35,46 @@ class _WizardViewState extends State<WizardView> {
   }
 
   Future<void> _submitForm() async {
-    if (_formKey.currentState!.validate()) {
-      _logger.info('Form submitted');
-      _logger.info('URL: ${_urlController.text}');
-      _logger.info('Username: ${_usernameController.text}');
-      
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
+    if (!_formKey.currentState!.validate()) return;
 
-      try {
-        final url = _urlController.text;
-        _logger.info('Setting base URL: $url');
-        await _zoneminderService.setBaseUrl(url);
+    _logger.info('Form submitted');
+    _logger.info('URL: ${_urlController.text}');
+    _logger.info('Username: ${_usernameController.text}');
+    
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
 
-        _logger.info('Attempting login...');
-        final response = await _zoneminderService.login(
-          _usernameController.text,
-          _passwordController.text,
+    try {
+      final url = _urlController.text;
+      _logger.info('Setting base URL: $url');
+      await _zoneminderService.setBaseUrl(url);
+
+      _logger.info('Attempting login...');
+      await _zoneminderService.login(
+        _usernameController.text,
+        _passwordController.text,
+      );
+
+      if (mounted) {
+        _logger.info('Login successful, navigating back to home');
+        // Pop back to the root and then push the home screen
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/',
+          (Route<dynamic> route) => false,
         );
-
-        if (mounted) {
-          _logger.info('Successfully connected to ZoneMinder version: ${response['version']}');
-          // Navigate to monitors view
-          if (mounted) {
-            Navigator.pushReplacementNamed(context, '/monitors');
-          }
-        }
-      } catch (e) {
-        _logger.severe('Connection error: $e');
+      }
+    } catch (e) {
+      _logger.severe('Login error: $e');
+      setState(() {
+        _error = e.toString();
+      });
+    } finally {
+      if (mounted) {
         setState(() {
-          _error = 'Error: $e';
+          _isLoading = false;
         });
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
       }
     }
   }

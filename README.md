@@ -42,6 +42,8 @@ The funny part was somewhere along the way, it suggested I replace streaming MJP
 
 ![](images/funny.png?raw=true)
 
+* I faced a lot of timeouts from Windsurf `Deadline exceeded: Encountered retryable error from model provider: context deadline exceeded (Client.Timeout or context cancellation while reading body)` - that slowed things down but hopefully their paid plans are better with this.
+
 
 # Conclusion
 
