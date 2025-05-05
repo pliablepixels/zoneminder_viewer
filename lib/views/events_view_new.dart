@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:convert';
+import 'package:logging/logging.dart';
 import '../services/zoneminder_service.dart';
 
 class EventsView extends StatefulWidget {
@@ -20,16 +22,17 @@ class _EventsViewState extends State<EventsView> {
   bool _isLoading = false;
   String? _error;
   List<Map<String, dynamic>> _events = [];
-  Map<int, String> _monitorNames = {};
+  Map<int, Map<String, dynamic>> _monitorNames = {};
   Set<int> _selectedMonitorIds = {};
   final int _limit = 20;
   bool _hasMore = true;
   bool _isInitialLoad = true;
+  static final Logger _logger = Logger('EventsView');
 
   @override
   void initState() {
     super.initState();
-    _loadInitialData();
+    _loadEvents();
   }
 
   @override
@@ -38,7 +41,7 @@ class _EventsViewState extends State<EventsView> {
     super.dispose();
   }
 
-  Future<void> _loadInitialData() async {
+  Future<void> _loadEvents({bool loadMore = false}) async {
     if (_isLoading) return;
 
     setState(() {
@@ -47,64 +50,44 @@ class _EventsViewState extends State<EventsView> {
     });
 
     try {
-      // Load monitors first
-      final monitors = await widget.zmService.getMonitorsMap();
-      _monitorNames = monitors.map((key, value) => 
-        MapEntry(key, value['Name'] as String? ?? 'Monitor $key')
-      );
-
-      // Load events
-      await _loadEvents();
-    } catch (e) {
-      setState(() {
-        _error = 'Failed to load events: $e';
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+      final zmService = Provider.of<ZoneMinderService>(context, listen: false);
+      
+      // Load monitor names if not already loaded
+      if (_monitorNames.isEmpty) {
+        _monitorNames = await zmService.getMonitorsMap();
       }
-    }
-  }
-
-  Future<void> _loadEvents() async {
-    if (_isLoading) return;
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      // Get events with current filters
-      final events = await widget.zmService.getEvents(
+      
+      // Calculate the next page to load
+      final currentPage = loadMore ? (_events.length ~/ _limit) + 1 : 1;
+      
+      // Load events
+      final response = await zmService.getEvents(
+        page: currentPage,
         limit: _limit,
-        monitorIds: _selectedMonitorIds.isNotEmpty 
-            ? _selectedMonitorIds.toList() 
-            : _monitorNames.keys.toList(),
+        monitorIds: _selectedMonitorIds.isNotEmpty ? _selectedMonitorIds.toList() : null,
       );
 
-      if (!mounted) return;
+      final newEvents = (response['events'] as List<dynamic>).cast<Map<String, dynamic>>();
+      final totalPages = response['totalPages'] as int;
       
       setState(() {
-        if (_isInitialLoad) {
-          _events = events;
+        if (loadMore) {
+          _events.addAll(newEvents);
         } else {
-          _events.addAll(events);
+          _events = newEvents;
         }
-        _hasMore = events.length >= _limit;
-        _isInitialLoad = false;
+        _hasMore = currentPage < totalPages;
       });
     } catch (e) {
       setState(() {
         _error = 'Failed to load events: $e';
       });
+      _logger.severe('Error loading events: $e');
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      setState(() {
+        _isLoading = false;
+        _isInitialLoad = false;
+      });
     }
   }
 
@@ -158,10 +141,11 @@ class _EventsViewState extends State<EventsView> {
                             },
                           ),
                           ..._monitorNames.entries.map((entry) {
+                            final monitorName = entry.value['Name']?.toString() ?? 'Monitor ${entry.key}';
                             return Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 4.0),
                               child: FilterChip(
-                                label: Text(entry.value),
+                                label: Text(monitorName),
                                 selected: _selectedMonitorIds.contains(entry.key),
                                 onSelected: (selected) {
                                   final newSelection = Set<int>.from(_selectedMonitorIds);
@@ -195,7 +179,9 @@ class _EventsViewState extends State<EventsView> {
         // Loading indicator or empty state
         if (_isLoading && _events.isEmpty)
           const Expanded(
-            child: Center(child: CircularProgressIndicator()),
+            child: Center(
+              child: CircularProgressIndicator(),
+            ),
           )
         else if (_events.isEmpty)
           const Expanded(
@@ -206,64 +192,93 @@ class _EventsViewState extends State<EventsView> {
         else
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () {
-                setState(() {
-                  _isInitialLoad = true;
-                  _events = [];
-                });
-                return _loadEvents();
-              },
+              onRefresh: _loadEvents,
               child: ListView.builder(
                 padding: const EdgeInsets.all(8.0),
                 itemCount: _events.length + (_hasMore ? 1 : 0),
                 itemBuilder: (context, index) {
                   if (index >= _events.length) {
-                    if (_hasMore) {
-                      _loadEvents();
-                      return const Center(child: CircularProgressIndicator());
-                    } else {
+                    if (!_hasMore) {
                       return const SizedBox.shrink();
                     }
-                  }
-
-                  final event = _events[index];
-                  final eventData = event['Event'] as Map<String, dynamic>? ?? {};
-                  final monitorId = eventData['MonitorId'] as int?;
-                  final monitorName = monitorId != null
-                      ? _monitorNames[monitorId] ?? 'Monitor $monitorId'
-                      : 'Unknown Monitor';
-                  
-                  final startTime = eventData['StartTime'] != null
-                      ? DateTime.parse(eventData['StartTime'] as String).toLocal()
-                      : null;
-                  
-                  final endTime = eventData['EndTime'] != null
-                      ? DateTime.parse(eventData['EndTime'] as String).toLocal()
-                      : null;
-
-                  return Card(
-                    margin: const EdgeInsets.symmetric(vertical: 4.0),
-                    child: ListTile(
-                      leading: const Icon(Icons.video_library),
-                      title: Text(monitorName),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (startTime != null)
-                            Text('Started: ${_formatDateTime(startTime)}'),
-                          if (endTime != null)
-                            Text('Ended: ${_formatDateTime(endTime)}'),
-                          if (eventData['Frames'] != null)
-                            Text('Frames: ${eventData['Frames']}'),
-                          if (eventData['AlarmFrames'] != null)
-                            Text('Alarm Frames: ${eventData['AlarmFrames']}'),
-                        ],
+                    // The loading indicator is now shown when index >= _events.length
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: CircularProgressIndicator(),
                       ),
-                      onTap: () {
-                        // TODO: Navigate to event details
-                      },
-                    ),
-                  );
+                    );
+                  }
+                  
+                  // Display event item
+                  try {
+                    final event = _events[index];
+                    final eventData = event['Event'] ?? event; // Handle both direct and nested event data
+                    final monitorId = eventData['MonitorId'] as int?;
+                    
+                    String monitorName = 'Unknown Monitor';
+                    if (monitorId != null) {
+                      final monitorData = _monitorNames[monitorId];
+                      monitorName = monitorData?['Name']?.toString() ?? 'Monitor $monitorId';
+                    }
+                    
+                    // Calculate duration if both start and end times are available
+                    String duration = 'N/A';
+                    if (eventData['StartTime'] != null && eventData['EndTime'] != null) {
+                      try {
+                        final start = DateTime.parse(eventData['StartTime']);
+                        final end = DateTime.parse(eventData['EndTime']);
+                        final diff = end.difference(start);
+                        duration = '${diff.inSeconds} seconds';
+                        if (diff.inMinutes > 0) {
+                          duration = '${diff.inMinutes}m ${diff.inSeconds.remainder(60)}s';
+                        }
+                      } catch (e) {
+                        _logger.warning('Error calculating duration: $e');
+                      }
+                    }
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: ListTile(
+                        leading: const Icon(Icons.video_library),
+                        title: Text(monitorName),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (eventData['Id'] != null)
+                              Text('Event ID: ${eventData['Id']}'),
+                            if (eventData['Cause'] != null && (eventData['Cause'] as String).isNotEmpty)
+                              Text('Cause: ${eventData['Cause']}'),
+                            if (eventData['StartTime'] != null)
+                              Text('Start: ${eventData['StartTime']}'),
+                            if (duration != 'N/A')
+                              Text('Duration: $duration'),
+                            if (eventData['DefaultVideo'] != null)
+                              Text('Video: ${eventData['DefaultVideo']}'),
+                            if (eventData['Frames'] != null)
+                              Text('Frames: ${eventData['Frames']} (${eventData['AlarmFrames'] ?? 0} alarm)'),
+                            if (eventData['Notes'] != null && (eventData['Notes'] as String).isNotEmpty)
+                              Text('Notes: ${eventData['Notes']}'),
+                          ].whereType<Widget>().toList(),
+                        ),
+                        onTap: () {
+                          // TODO: Navigate to event details
+                        },
+                      ),
+                    );
+                  } catch (e) {
+                    _logger.severe('Error rendering event: $e');
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: ListTile(
+                        leading: const Icon(Icons.error),
+                        title: const Text('Error loading event'),
+                        subtitle: Text('Error: $e'),
+                      ),
+                    );
+                  }
+                  // The loading indicator is now shown when index >= _events.length
                 },
               ),
             ),

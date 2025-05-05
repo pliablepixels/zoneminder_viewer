@@ -22,8 +22,23 @@ class _WizardViewState extends State<WizardView> {
   @override
   void initState() {
     super.initState();
-    _zoneminderService.initialize();
-    _logger.info('WizardView initialized');
+    _initializeService();
+  }
+
+  Future<void> _initializeService() async {
+    try {
+      await _zoneminderService.ensureInitialized();
+      if (mounted) {
+        _logger.info('WizardView initialized');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to initialize service: $e';
+        });
+        _logger.severe('Error initializing service: $e');
+      }
+    }
   }
 
   @override
@@ -45,8 +60,11 @@ class _WizardViewState extends State<WizardView> {
       _isLoading = true;
       _error = null;
     });
-
+    
     try {
+      // Ensure service is initialized before proceeding
+      await _zoneminderService.ensureInitialized();
+
       final url = _urlController.text;
       _logger.info('Setting base URL: $url');
       await _zoneminderService.setBaseUrl(url);

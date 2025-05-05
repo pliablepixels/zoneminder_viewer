@@ -15,38 +15,79 @@ class ZoneMinderService extends ChangeNotifier {
   String _apiUrl = '';
   String? _accessToken;
   String? _refreshToken;
+  bool _isInitialized = false;
 
-  Future<void> initialize() async {
-    final prefs = await SharedPreferences.getInstance();
-    _baseUrl = prefs.getString(_baseUrlKey) ?? _baseUrl;
-    _apiUrl = _sanitizeUrl('$_baseUrl/api');
-    _accessToken = prefs.getString(_accessTokenKey);
-    _refreshToken = prefs.getString(_refreshTokenKey);
-    _logger.info('Initialized ZoneMinderService with base URL: $_baseUrl');
-    _logger.info('API URL: $_apiUrl');
-    _logger.info('Has access token: ${_accessToken != null}');
+  /// Ensures the service is initialized before making any API calls
+  Future<void> ensureInitialized() async {
+    if (!_isInitialized) {
+      await _initialize();
+    }
+  }
+
+  Future<void> _initialize() async {
+    _logger.info('Initializing ZoneMinderService...');
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _logger.info('Loaded SharedPreferences');
+      
+      _baseUrl = prefs.getString(_baseUrlKey) ?? _baseUrl;
+      _logger.info('Base URL from prefs: ${prefs.getString(_baseUrlKey) ?? 'using default'}');
+      
+      final apiUrl = '$_baseUrl/api';
+      _logger.info('Constructed API URL before sanitization: $apiUrl');
+      
+      _apiUrl = _sanitizeUrl(apiUrl);
+      _accessToken = prefs.getString(_accessTokenKey);
+      _refreshToken = prefs.getString(_refreshTokenKey);
+      
+      _isInitialized = true;
+      
+      _logger.info('Initialized ZoneMinderService with:');
+      _logger.info('- Base URL: $_baseUrl');
+      _logger.info('- API URL: $_apiUrl');
+      _logger.info('- Has access token: ${_accessToken != null}');
+      _logger.info('- Has refresh token: ${_refreshToken != null}');
+    } catch (e) {
+      _logger.severe('Error initializing ZoneMinderService: $e');
+      rethrow;
+    }
   }
 
   String _sanitizeUrl(String url) {
     _logger.fine('Sanitizing URL: $url');
+    
+    // Handle empty or null URL
+    if (url.isEmpty) {
+      _logger.warning('Empty URL provided, using default');
+      return 'https://demo.zoneminder.com/api';
+    }
+
+    // Ensure URL has a scheme
     if (!url.startsWith('http')) {
       url = 'https://$url';
       _logger.fine('Added scheme: $url');
     }
     
-    final parts = url.split('://');
-    if (parts.length != 2) {
-      _logger.fine('URL already has proper format: $url');
-      return url;
+    try {
+      // Parse the URL to ensure it's valid
+      final uri = Uri.parse(url);
+      
+      // Rebuild the URL with proper formatting
+      final sanitized = Uri(
+        scheme: uri.scheme,
+        host: uri.host,
+        port: uri.port,
+        path: uri.path.replaceAll(RegExp(r'/{2,}'), '/'),
+        query: uri.query,
+      ).toString();
+      
+      _logger.fine('Sanitized URL: $sanitized');
+      return sanitized;
+    } catch (e) {
+      _logger.severe('Error parsing URL: $e');
+      // Return a default URL if parsing fails
+      return 'https://demo.zoneminder.com/api';
     }
-    
-    final scheme = parts[0];
-    String rest = parts[1].replaceAll(RegExp(r'/{2,}'), '/');
-    _logger.fine('Sanitized rest of URL: $rest');
-    
-    final sanitized = '$scheme://$rest';
-    _logger.fine('Final sanitized URL: $sanitized');
-    return sanitized;
   }
 
   Future<Map<String, String>> _getHeaders() async {
@@ -147,11 +188,26 @@ class ZoneMinderService extends ChangeNotifier {
   }
 
   Future<List<Map<String, dynamic>>> getMonitors() async {
+    await ensureInitialized();
     _logger.info('Fetching monitors');
     try {
-      final response = await http.get(
-        Uri.parse('${_baseUrl}/api/monitors.json'),
-        headers: await _getHeaders(),
+      final headers = await _getHeaders();
+      
+      // Construct the full URL
+      final fullUrl = '$_apiUrl/monitors.json';
+      _logger.fine('Constructed full URL: $fullUrl');
+      
+      // Parse the URL to ensure it's valid
+      final url = Uri.parse(fullUrl);
+      _logger.fine('Parsed URL: $url');
+      _logger.fine('URL components - scheme: ${url.scheme}, host: ${url.host}, path: ${url.path}');
+      
+      if (url.host.isEmpty) {
+        throw Exception('No host specified in URL. API URL: $_apiUrl');
+      }
+      
+      final response = await _makeAuthenticatedRequest(
+        () => http.get(url, headers: headers),
       );
       
       _logger.fine('Received response with status code: ${response.statusCode}');
@@ -162,7 +218,7 @@ class ZoneMinderService extends ChangeNotifier {
         if (data is Map<String, dynamic> && data.containsKey('monitors')) {
           final monitors = data['monitors'] as List<dynamic>;
           _logger.info('Retrieved ${monitors.length} monitors');
-          return monitors.map((m) => m as Map<String, dynamic>).toList();
+          return monitors.cast<Map<String, dynamic>>();
         } else {
           _logger.severe('Unexpected response format: $data');
           throw Exception('Unexpected response format from ZoneMinder API');
@@ -289,48 +345,85 @@ class ZoneMinderService extends ChangeNotifier {
 
   bool get isAuthenticated => _accessToken != null;
 
-  /// Fetches recent events from ZoneMinder
-  Future<List<Map<String, dynamic>>> getEvents({
-    int limit = 50,
-    DateTime? from,
-    DateTime? to,
+  /// Formats a DateTime to the format expected by ZoneMinder API (YYYY-MM-DD HH:MM:SS)
+  String _formatDateTime(DateTime dateTime) {
+    final year = dateTime.year.toString().padLeft(4, '0');
+    final month = dateTime.month.toString().padLeft(2, '0');
+    final day = dateTime.day.toString().padLeft(2, '0');
+    final hour = dateTime.hour.toString().padLeft(2, '0');
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    final second = dateTime.second.toString().padLeft(2, '0');
+    return '$year-$month-${day}T$hour:$minute:$second';
+  }
+
+  /// Fetches events from ZoneMinder with support for pagination and filtering
+  Future<Map<String, dynamic>> getEvents({
+    int page = 1,
+    int limit = 20,
     List<int>? monitorIds,
+    DateTime? startTime,
+    DateTime? endTime,
   }) async {
-    _logger.info('Fetching events with limit: $limit');
+    await ensureInitialized();
+    _logger.info('Fetching events (page: $page, limit: $limit)');
     
     try {
-      // Build query parameters
-      final params = <String, String>{
-        'limit': limit.toString(),
-        'sort': 'StartTime',
-        'direction': 'desc',
-      };
-
-      if (from != null) {
-        params['from'] = from.toUtc().toIso8601String();
-      }
-      if (to != null) {
-        params['to'] = to.toUtc().toIso8601String();
-      }
+      // Build the base URL
+      String url = '$_apiUrl/events';
+      
+      // Add monitor filter if specified
       if (monitorIds != null && monitorIds.isNotEmpty) {
-        params['monitor_ids'] = monitorIds.join(',');
+        url += '/index';
+        for (final id in monitorIds) {
+          url += '/MonitorId:$id';
+        }
       }
-
-      final uri = Uri.parse('$_apiUrl/events.json').replace(
-        queryParameters: params,
-      );
-
+      url += '.json';
+      
+      // Add query parameters
+      final queryParams = <String, String>{
+        'page': page.toString(),
+        'limit': limit.toString(),
+      };
+      
+      // Add time range filters if specified
+      if (startTime != null) {
+        queryParams['from'] = _formatDateTime(startTime);
+      }
+      if (endTime != null) {
+        queryParams['to'] = _formatDateTime(endTime);
+      }
+      
+      final uri = Uri.parse(url).replace(queryParameters: queryParams);
       final headers = await _getHeaders();
+      
+      _logger.fine('Using headers: $headers');
+      _logger.fine('Final URI: $uri');
+      
       final response = await _makeAuthenticatedRequest(
         () => http.get(uri, headers: headers),
       );
 
+      _logger.fine('Received response with status code: ${response.statusCode}');
+      _logger.fine('Response body: ${response.body}');
+
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data is Map<String, dynamic> && data.containsKey('events')) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        
+        // The API returns events in a 'events' field and pagination info in 'pagination'
+        if (data.containsKey('events') && data['events'] is List) {
           final events = data['events'] as List<dynamic>;
-          _logger.info('Retrieved ${events.length} events');
-          return events.cast<Map<String, dynamic>>();
+          final pagination = data['pagination'] as Map<String, dynamic>? ?? {};
+          
+          _logger.info('Retrieved ${events.length} events (page $page of ${pagination['pageCount'] ?? '?'})');
+          
+          return {
+            'events': events.cast<Map<String, dynamic>>(),
+            'pagination': pagination,
+            'currentPage': page,
+            'totalEvents': pagination['count'] ?? events.length,
+            'totalPages': pagination['pageCount'] ?? 1,
+          };
         } else {
           _logger.severe('Unexpected response format: $data');
           throw Exception('Unexpected response format from ZoneMinder API');
@@ -365,21 +458,42 @@ class ZoneMinderService extends ChangeNotifier {
 
   /// Gets the monitor name by ID
   Future<String> getMonitorName(int monitorId) async {
+    await ensureInitialized();
     try {
+      _logger.fine('Getting name for monitor ID: $monitorId');
       final headers = await _getHeaders();
+      
+      // Construct the full URL
+      final fullUrl = '$_apiUrl/monitors/$monitorId.json';
+      _logger.fine('Constructed monitor URL: $fullUrl');
+      
+      // Parse the URL to ensure it's valid
+      final url = Uri.parse(fullUrl);
+      _logger.fine('Parsed URL: $url');
+      
+      if (url.host.isEmpty) {
+        throw Exception('No host specified in URL. API URL: $_apiUrl');
+      }
+      
       final response = await _makeAuthenticatedRequest(
-        () => http.get(
-          Uri.parse('$_apiUrl/monitors/$monitorId.json'),
-          headers: headers,
-        ),
+        () => http.get(url, headers: headers),
       );
+
+      _logger.fine('Received response with status code: ${response.statusCode}');
+      _logger.fine('Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data is Map<String, dynamic> && data.containsKey('monitor')) {
           final monitor = data['monitor'] as Map<String, dynamic>;
-          return monitor['Name'] as String? ?? 'Monitor $monitorId';
+          final name = monitor['Name'] as String? ?? 'Monitor $monitorId';
+          _logger.fine('Retrieved monitor name: $name');
+          return name;
+        } else {
+          _logger.warning('Unexpected response format for monitor $monitorId: $data');
         }
+      } else {
+        _logger.warning('Failed to fetch monitor $monitorId: ${response.statusCode} - ${response.body}');
       }
       return 'Monitor $monitorId';
     } catch (e) {

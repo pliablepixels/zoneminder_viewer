@@ -7,6 +7,11 @@ import 'views/wizard_view.dart';
 import 'views/monitor_view.dart';
 import 'views/events_view_new.dart' show EventsView;
 
+String _truncateMessage(String message, {int maxLength = 300}) {
+  if (message.length <= maxLength) return message;
+  return '${message.substring(0, maxLength)}...';
+}
+
 void main() {
   // Initialize logging with enhanced output
   Logger.root.level = Level.ALL;
@@ -14,7 +19,10 @@ void main() {
     final time = record.time.toLocal().toString().split(' ')[1];
     final level = record.level.name.padRight(7);
     final loggerName = record.loggerName.padRight(20);
-    debugPrint('$time $level [${record.loggerName}] ${record.message}');
+    final message = record.level == Level.FINE 
+        ? _truncateMessage(record.message)
+        : record.message;
+    debugPrint('$time $level [${record.loggerName}] $message');
   });
 
   runApp(const ZoneMinderApp());
@@ -41,7 +49,10 @@ class _ZoneMinderAppState extends State<ZoneMinderApp> {
 
   Future<void> _checkAuthStatus() async {
     try {
-      await _zmService.initialize();
+      _logger.info('Initializing ZoneMinderService...');
+      await _zmService.ensureInitialized();
+      _logger.info('ZoneMinderService initialized successfully');
+      
       final prefs = await SharedPreferences.getInstance();
       final hasToken = prefs.getString('zoneminder_access_token') != null;
       
