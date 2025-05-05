@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'dart:convert';
 import 'package:logging/logging.dart';
 import '../services/zoneminder_service.dart';
+import 'event_playback_screen.dart';
+import '../widgets/mjpeg_view.dart';
 
 class EventsView extends StatefulWidget {
   final ZoneMinderService zmService;
@@ -244,9 +246,7 @@ class _EventsViewState extends State<EventsView> {
                     return Card(
                       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       child: InkWell(
-                        onTap: () {
-                          // TODO: Navigate to event details
-                        },
+                        onTap: () => _onEventTap(eventData),
                         child: Padding(
                           padding: const EdgeInsets.all(8.0),
                           child: Row(
@@ -342,6 +342,35 @@ class _EventsViewState extends State<EventsView> {
           ),
       ],
     );
+  }
+
+  void _onEventTap(Map<String, dynamic> eventData) {
+    final eventId = eventData['Id'] as int?;
+    if (eventId != null) {
+      final zmService = Provider.of<ZoneMinderService>(context, listen: false);
+      final playbackUrl = zmService.getEventPlaybackUrl(eventId);
+      
+      final eventInfo = eventData['Event'] ?? eventData;
+      final monitorId = eventInfo['MonitorId'] as int?;
+      final monitorName = (monitorId != null && _monitorNames[monitorId] != null) 
+          ? (_monitorNames[monitorId]!['Name']?.toString() ?? 'Monitor $monitorId')
+          : 'Unknown Monitor';
+      
+      _logger.info('Opening event $eventId from monitor $monitorId ($monitorName)');
+      
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => EventPlaybackScreen(
+            eventId: eventId,
+            monitorName: monitorName,
+            cause: eventInfo['Cause']?.toString(),
+            notes: eventInfo['Notes']?.toString(),
+            playbackUrl: playbackUrl,
+          ),
+        ),
+      );
+    }
   }
 
   String _formatDateTime(DateTime dateTime) {

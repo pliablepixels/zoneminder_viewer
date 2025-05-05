@@ -366,6 +366,42 @@ class ZoneMinderService extends ChangeNotifier {
     return '$_baseUrl/index.php?$query';
   }
 
+  /// Generates a URL for playing back an event
+  /// 
+  /// The format is: $_baseUrl/cgi-bin/nph-zms?mode=jpeg&frame=1&scale=10&rate=100
+  /// &maxfps=10&replay=none&source=event&event=<eventId>&connkey=<random>&rand=<random>
+  String getEventPlaybackUrl(int eventId) {
+    final random = Random();
+    final connkey = random.nextInt(1000000).toString();
+    final rand = random.nextInt(1000000).toString();
+    
+    final params = <String, String>{
+      'mode': 'jpeg',
+      'frame': '1',
+      'scale': '10',
+      'rate': '100',
+      'maxfps': '10',
+      'replay': 'none',
+      'source': 'event',
+      'event': eventId.toString(),
+      'connkey': connkey,
+      'rand': rand,
+    };
+    
+    // Add token if authenticated
+    if (_accessToken != null && _accessToken != 'noauth') {
+      params['auth'] = _accessToken!;
+    }
+    
+    final query = Uri(queryParameters: params).query;
+    final url = '$_baseUrl/cgi-bin/nph-zms?$query';
+    
+    _logger.info('Generated event playback URL for event $eventId: $url');
+    _logger.fine('Connection parameters - connkey: $connkey, rand: $rand');
+    
+    return url;
+  }
+
   /// Formats a DateTime to the format expected by ZoneMinder API (YYYY-MM-DD HH:MM:SS)
   String _formatDateTime(DateTime dateTime) {
     final year = dateTime.year.toString().padLeft(4, '0');
