@@ -15,8 +15,8 @@ Overall, let me say this:
 - It still continues to make large scale mistakes for simple asks. Sometimes it works well, sometimes it goes on a complete tangent, that I just have to ask it to undo. For example, even though I got events working in minutes, when I asked it fix one aspect of the events screen, it completely messed up my generic zoneminder API services to a point that monitors stopped working.
 
 
-![](images/project1.png?raw=true)
-![](images/project2.png?raw=true)
+![](images/monitors.png?raw=true)
+![](images/events.png?raw=true)
 
 ## Experiences from this effort
 
