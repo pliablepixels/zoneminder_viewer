@@ -5,10 +5,13 @@ import 'views/monitor_view.dart';
 import 'views/events_view.dart';
 
 void main() {
-  // Initialize logging
+  // Initialize logging with enhanced output
   Logger.root.level = Level.ALL;
   Logger.root.onRecord.listen((record) {
-    debugPrint('${record.level.name}: ${record.time}: ${record.message}');
+    final time = record.time.toLocal().toString().split(' ')[1];
+    final level = record.level.name.padRight(7);
+    final loggerName = record.loggerName.padRight(20);
+    debugPrint('$time $level [${record.loggerName}] ${record.message}');
   });
 
   runApp(const MyApp());
