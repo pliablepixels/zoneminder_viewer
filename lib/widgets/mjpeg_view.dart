@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:async';
-import 'dart:typed_data';
-import 'dart:convert';
-import 'dart:developer' as developer;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:webview_flutter/webview_flutter.dart';
+
+// Import for WebView widgets
+import 'package:webview_flutter_android/webview_flutter_android.dart';
+import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
 class MjpegView extends StatefulWidget {
   final String streamUrl;
@@ -20,187 +21,136 @@ class MjpegView extends StatefulWidget {
 }
 
 class _MjpegViewState extends State<MjpegView> {
-  Stream<Uint8List>? _stream;
-  Timer? _timer;
+  late final WebViewController _controller;
   bool _isLoading = true;
   String? _error;
-  bool _isReconnecting = false;
-  final int _reconnectDelay = 5; // seconds
-  int _reconnectAttempts = 0;
-  final int _maxReconnectAttempts = 5;
-
-  // Process MJPEG frame from stream
-  Future<Uint8List?> _processMjpegFrame(List<int> data) async {
-    try {
-      // Look for frame boundary
-      final boundary = '--boundarydonotcross'.codeUnits;
-      final boundaryIndex = data.indexOf(boundary[0]);
-      
-      if (boundaryIndex != -1) {
-        // Extract frame data
-        final frameData = data.sublist(0, boundaryIndex);
-        return Uint8List.fromList(frameData);
-      }
-      return null;
-    } catch (e) {
-      debugPrint('Error processing MJPEG frame: $e');
-      return null;
-    }
-  }
 
   @override
   void initState() {
     super.initState();
-    _startStream();
+    _initializeWebView();
+  }
+
+  void _initializeWebView() {
+    // Create platform-specific controller
+    late final PlatformWebViewControllerCreationParams params;
+    
+    // Configure for WKWebView on iOS/macOS
+    if (WebViewPlatform.instance is WebKitWebViewPlatform) {
+      params = WebKitWebViewControllerCreationParams(
+        allowsInlineMediaPlayback: true,
+        mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
+      );
+    } else {
+      params = const PlatformWebViewControllerCreationParams();
+    }
+
+    // Create the WebViewController
+    _controller = WebViewController.fromPlatformCreationParams(params);
+    
+    // Configure common settings
+    _controller
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (String url) {
+            if (mounted) {
+              setState(() => _isLoading = true);
+            }
+          },
+          onPageFinished: (String url) {
+            if (mounted) {
+              setState(() => _isLoading = false);
+            }
+          },
+          onWebResourceError: (error) {
+            if (mounted) {
+              setState(() {
+                _error = 'Failed to load stream: ${error.description}';
+                _isLoading = false;
+              });
+            }
+          },
+        ),
+      );
+
+    // Platform specific configurations
+    if (_controller.platform is AndroidWebViewController) {
+      AndroidWebViewController.enableDebugging(true);
+      final androidController = _controller.platform as AndroidWebViewController;
+      androidController.setMediaPlaybackRequiresUserGesture(false);
+    }
+
+    try {
+      // For web platform, we need to use an iframe to properly handle the MJPEG stream
+      if (kIsWeb) {
+        _controller.loadHtmlString('''
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+              body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
+              img { width: 100%; height: 100%; object-fit: cover; }
+            </style>
+          </head>
+          <body>
+            <img src="${widget.streamUrl}" />
+          </body>
+          </html>
+        ''');
+      } else {
+        // For desktop/mobile, use the direct URL
+        _controller.loadRequest(Uri.parse(widget.streamUrl));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to initialize WebView: $e';
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
-    _stream?.drain();
-    _stream = null;
-    super.dispose();
-  }
-
-  Future<void> _startStream() async {
     try {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-        _reconnectAttempts = 0;
-      });
-
-      final client = http.Client();
-      try {
-        // Add headers for MJPEG streaming
-        final request = http.Request('GET', Uri.parse(widget.streamUrl))
-          ..headers['Accept'] = 'multipart/x-mixed-replace;boundary=--boundarydonotcross'
-          ..headers['Connection'] = 'keep-alive'
-          ..headers['Cache-Control'] = 'no-cache'
-          ..headers['Pragma'] = 'no-cache'
-          ..headers['User-Agent'] = 'Flutter MJPEG Viewer';
-
-        final response = await client.send(request);
-
-        if (response.statusCode == 200) {
-          // Create a controller to handle the stream
-          final controller = StreamController<Uint8List>();
-          
-          // Listen to the response stream
-          response.stream.listen(
-            (data) async {
-              if (mounted) {
-                final frame = await _processMjpegFrame(data);
-                if (frame != null) {
-                  controller.add(frame);
-                }
-              }
-            },
-            onError: (error) {
-              if (mounted && !_isReconnecting) {
-                _isReconnecting = true;
-                setState(() {
-                  _error = 'Stream Error: $error';
-                  _isLoading = true;
-                });
-                
-                // Wait and retry
-                Future.delayed(Duration(seconds: _reconnectDelay), () {
-                  if (_reconnectAttempts < _maxReconnectAttempts) {
-                    _reconnectAttempts++;
-                    _startStream();
-                  } else {
-                    _isReconnecting = false;
-                    setState(() {
-                      _error = 'Failed to reconnect after $_maxReconnectAttempts attempts';
-                      _isLoading = false;
-                    });
-                  }
-                });
-              }
-              controller.close();
-            },
-            onDone: () {
-              if (mounted && !_isReconnecting) {
-                _isReconnecting = true;
-                setState(() {
-                  _error = 'Stream connection closed';
-                  _isLoading = true;
-                });
-                
-                // Wait and retry
-                Future.delayed(Duration(seconds: _reconnectDelay), () {
-                  if (_reconnectAttempts < _maxReconnectAttempts) {
-                    _reconnectAttempts++;
-                    _startStream();
-                  } else {
-                    _isReconnecting = false;
-                    setState(() {
-                      _error = 'Failed to reconnect after $_maxReconnectAttempts attempts';
-                      _isLoading = false;
-                    });
-                  }
-                });
-              }
-              controller.close();
-            },
-            cancelOnError: false,
-          );
-
-          setState(() {
-            _stream = controller.stream;
-            _isLoading = false;
-          });
-
-          // Start a timer to keep the stream alive
-          _timer = Timer.periodic(const Duration(seconds: 30), (timer) {
-            if (mounted) {
-              setState(() {
-                // No-op to trigger a rebuild and keep the stream alive
-              });
-            }
-          });
-        } else {
-          throw Exception('Failed to get stream: ${response.statusCode}');
-        }
-      } finally {
-        client.close();
-      }
+      _controller.clearCache();
     } catch (e) {
-      if (mounted && !_isReconnecting) {
-        _isReconnecting = true;
-        setState(() {
-          _error = 'Initial connection failed: $e';
-          _isLoading = false;
-        });
-        
-        // Wait and retry
-        Future.delayed(Duration(seconds: _reconnectDelay), () {
-          if (_reconnectAttempts < _maxReconnectAttempts) {
-            _reconnectAttempts++;
-            _startStream();
-          } else {
-            _isReconnecting = false;
-            setState(() {
-              _error = 'Failed to reconnect after $_maxReconnectAttempts attempts';
-              _isLoading = false;
-            });
-          }
-        });
-      }
+      // Ignore errors during dispose
     }
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     if (_error != null) {
       return Center(
-        child: Text(
-          _error!,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 48),
+            const SizedBox(height: 16),
+            Text(
+              _error!,
+              style: const TextStyle(color: Colors.red),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                if (mounted) {
+                  setState(() {
+                    _error = null;
+                    _isLoading = true;
+                  });
+                  _initializeWebView();
+                }
+              },
+              child: const Text('Retry'),
+            ),
+          ],
         ),
       );
     }
@@ -211,32 +161,11 @@ class _MjpegViewState extends State<MjpegView> {
       );
     }
 
-    return StreamBuilder<Uint8List>(
-      stream: _stream,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(
-            child: Text(
-              'Stream Error: ${snapshot.error}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          );
-        }
-
-        if (snapshot.hasData) {
-          return Image.memory(
-            snapshot.data!,
-            fit: widget.fit,
-          );
-        }
-
-        return const Center(
-          child: CircularProgressIndicator(),
-        );
-      },
+    return WebViewWidget(
+      controller: _controller,
+      // Ensure proper sizing on all platforms
+      layoutDirection: TextDirection.ltr,
+      key: GlobalKey(),
     );
   }
 }
