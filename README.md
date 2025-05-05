@@ -10,7 +10,9 @@ Overall, let me say this:
    - I have to instruction it with technical details where possible. If I give it a non technical goal, more often than not, it will generate a mess. This means, I need to know my stuff and guide it when it flounders (and it flounders often)
 - Day 3: Quite impressed. I roughed in an events view in seconds, now that I know how to work with it
 
-The jury is still out on quality. I don't see it generating modular/structured  code (for example, the authentication code it generated, even when I asked for a modular service was not modular, and nor was it callable from other services. I had to prompt it with specific guidance to make it callable from other services). 
+- The jury is still out on quality. I don't see it generating modular/structured  code (for example, the authentication code it generated, even when I asked for a modular service was not modular, and nor was it callable from other services. I had to prompt it with specific guidance to make it callable from other services).
+
+- It still continues to make large scale mistakes for simple asks. Sometimes it works well, sometimes it goes on a complete tangent, that I just have to ask it to undo
 
 
 ![](images/project1.png?raw=true)
