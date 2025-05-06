@@ -23,6 +23,9 @@ Overall, let me say this:
 
 * At home, and for my personal experiments/projects, I code using both copilot (agent mode + claude 3.5 and 3.7) and windsurf. **Windsurf is better in my experiments, by a large margin.**
 
+_(For those who want to know the details: these editors don't make chat history easy, but a big shout out to [Shottr](https://shottr.cc/) that allows scrolling image captures. You'll see two folders with several images. [failed run 1](https://github.com/pliablepixels/zoneminder_viewer/tree/main/images/chats/run1-failed) and [failed run 2](https://github.com/pliablepixels/zoneminder_viewer/tree/main/images/chats/run2-failed) are histories of my chat with options that did not work. In these, I started with more explicit requirements. [success run 3](https://github.com/pliablepixels/zoneminder_viewer/tree/main/images/chats/run-3-success-part) is a partial capture of me starting small and building up. A lot of fun happened after these screenshots, but you get the gist. When you click on the images, increase zoom factor by a lot so you can read.)_
+
+At a high level:
 * I spent 2 days trying two approaches. 
    * Approach 1 was to write a detailed PRD on how the app should function, including how to use the APIs, how to layout screens, functional and non functional requirements. The output _looked_ impressive, but it was a nightmare to actually make it work. Between fixing build dependencies,getting the API to work and trying to figure out how one change was breaking many other views,  it was a never ending loop of problems. Windsurf kept making changes that broke other things. It finally got to a point where windsurf asked me to remove and reinstall flutter and all related packages as the 'right fix'. I told it 'No, flutter works great on other projects' and it said 'Ah! That is very important information' and proceeded to list another set of things that I knew won't work. That is when I killed this approach. 
 
@@ -38,6 +41,7 @@ Overall, let me say this:
    ```
 
    From then, I had to spend 3-4 hours to keep tweaking it via prompts and it finally worked. Given I am not a flutter developer, this approach helped me. If I was familiar with flutter, I might have been faster developing the app. I am not sure. 
+
 
 
 * The process was both fun and frustrating. It was wonderful to see windsurf apply its agents and tools to create my directories, run code, analyze output and try to auto fix them. The flow was seamless - that is the power of agents and tools. That being said, when you look beyond the surface and stop being amazed at how it automates steps, you come to the conclusion this is like taking a very inexperienced developer with access to, say, stackoverflow through building an app. Windsurf would continously make confident changes that wouldn't work, then extract error logs and try to fix them. **That makes sense - the "reasoning" part of most of these tools is the most underdeveloped. They are good at taking a problem statement and trying to fix it. Therefore, the problem needs to occur for them to know how to fix it.** (This is also why it's fascinating to see it create bad code and self fix, which is a great thing to watch unfold, but eventually wastes a lot of time) This is unlike a seasoned developer who can implement reasoning and logic from the start. The entire experience was similar to starting to paste code from elsewhere and debugging our way towards fixing it for the most part.
