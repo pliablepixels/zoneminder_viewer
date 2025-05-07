@@ -8,13 +8,13 @@ Overall, let me say this:
 - Day 2: (After I pivoted my approach), I found it to be something I can leverage with two habit changing lessons for me:
    - I have to be patient with it failing, repeatedly. It knows how to fix bugs, and when bugs are generated that are specific, it can fix them better. Just like a starter developer. Huh.
    - I have to instruction it with technical details where possible. If I give it a non technical goal, more often than not, it will generate a mess. This means, I need to know my stuff and guide it when it flounders (and it flounders often)
-- Day 3: Much better, I roughed in an events view in seconds, now that I know how to work with it
+- Day 3: Much better, I roughed in an events view in seconds, now that I know how to work with it. However, there are many prompting loops required to fix issues it continues to create.
 
-- The jury is still out on quality. I don't see it generating modular/structured  code  and nor is great quality (for example, the authentication code it generated, even when I asked for a modular service was not modular, and nor was it callable from other services. I had to prompt it with specific guidance to make it callable from other services. Similarly, the amount of times it has generated code telling me "it should all work" followed by the next analysis fixing syntax errors it self created earlier is funny).
+- The jury is still out on quality. I don't see it generating modular/structured  code  and nor is great quality (for example, the authentication code it generated, even when I asked for a modular service was not modular, and nor was it callable from other services. I had to prompt it with specific guidance to make it callable from other services. Similarly, the amount of times it has generated code telling me "it should all work" followed by the next analysis fixing syntax errors it self created earlier is funny). 
 
 - It still continues to make large scale mistakes for simple asks. Sometimes it works well, sometimes it goes on a complete tangent, that I just have to ask it to undo. For example, even though I got events working in minutes, when I asked it fix one aspect of the events screen, it completely messed up my generic zoneminder API services to a point that monitors stopped working.
 
-- **The absolutely most frustrating part was that it kept breaking reasonable code it wrote earlier while trying to fix a completely unrelated problem. This happens over and over again. Get ready with your undo prompts**. For example, I ask it to fix an event format, and our good friend goes ahead and concludes my service API for retrieving monitors is broken and goes about fixing (breaking it)
+- **The most frustrating part was that it kept breaking reasonable code it wrote earlier while trying to fix a completely unrelated problem. This happens over and over again. Get ready with your undo prompts**. For example, I ask it to fix an event format, and our good friend goes ahead and concludes my service API for retrieving monitors is broken and goes about fixing (breaking it)
 
 ![](images/monitors.png?raw=true)
 ![](images/events.png?raw=true)
@@ -68,6 +68,10 @@ The funny part was somewhere along the way, it suggested I replace streaming MJP
 * The agents work better by creating problems and then trying to fix them (takes a lot of time though, but it eventuall gets there)
 * Get used to seeing the agent produce poor code with confidence and break everything. Don't give up though - keep guiding it on errors (if it is not able to self detect - sometimes it can if the output is on a terminal, but if its UI app related, it won't know)
 * Know when to break the agent loop with human intervention. Break up the problem statement into smaller chunks if the old request keeps producing problems (ask it to undo X steps). If you see the agent mess up over and over again and breaking up the problem doesn't help, just do it manually. At some opint, you will need to own your time.
+* It is critical to assess what it generates. Just becuse it works doesn't mean it is right. Here is one of many examples:
+   * It struggled to get the authentication code right. The app uses a common pattern - you use a login API and it  gets back access and refresh tokens. When I gave it instructions to use access and refersh tokens and auto refresh when it expires, it implemented this approach by trying an API - if the answer was a 401, then it would re-login. It completely ignored the expiry times that came with the tokens. It also did not carry over the auth tokens to other URLs. Many other mistakes.
+
+![](images/monitors.png?raw=true)
 
 * There is a solid place for these tools. They get you started reasonably well, but don't go overboard. You still need to be the "expert" and you still need to know when these tools go for a loop (not kidding)! 
 * They are good at solving contained jobs. 
