@@ -7,7 +7,7 @@ class EventPlaybackScreen extends StatelessWidget {
   final String monitorName;
   final String? cause;
   final String? notes;
-  final String playbackUrl;
+  final Future<String> playbackUrl;
   
   static final Logger _logger = Logger('EventPlaybackScreen');
 
@@ -15,13 +15,14 @@ class EventPlaybackScreen extends StatelessWidget {
     super.key,
     required this.eventId,
     required this.monitorName,
-    required this.playbackUrl,
+    required Future<String> playbackUrl,
     this.cause,
     this.notes,
-  }) {
-    _logger.info('Opening event playback for event $eventId');
-    _logger.info('Playback URL: $playbackUrl');
-  }
+  }) : playbackUrl = playbackUrl.then((url) {
+      _logger.info('Opening event playback for event $eventId');
+      _logger.info('Playback URL: $url');
+      return url;
+    });
 
   @override
   Widget build(BuildContext context) {
@@ -56,16 +57,27 @@ class EventPlaybackScreen extends StatelessWidget {
                     child: Text('Notes: $notes'),
                   ),
                 const Divider(height: 20),
-                SelectableText(
+                const Text(
                   'Stream URL:',
-                  style: Theme.of(context).textTheme.bodySmall,
+                  style: TextStyle(fontSize: 12),
                 ),
-                SelectableText(
-                  playbackUrl,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.blue,
-                    decoration: TextDecoration.underline,
-                  ),
+                FutureBuilder<String>(
+                  future: playbackUrl,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Text('Loading URL...', style: TextStyle(fontStyle: FontStyle.italic));
+                    }
+                    if (snapshot.hasError) {
+                      return Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red));
+                    }
+                    return SelectableText(
+                      snapshot.data ?? 'No URL available',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.blue,
+                        decoration: TextDecoration.underline,
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -73,9 +85,23 @@ class EventPlaybackScreen extends StatelessWidget {
           
           // Video player section
           Expanded(
-            child: MjpegView(
-              streamUrl: Future.value(playbackUrl),
-              fit: BoxFit.contain,
+            child: FutureBuilder<String>(
+              future: playbackUrl,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+                if (snapshot.data == null || snapshot.data!.isEmpty) {
+                  return const Center(child: Text('No stream URL available'));
+                }
+                return MjpegView(
+                  streamUrl: Future.value(snapshot.data!),
+                  fit: BoxFit.contain,
+                );
+              },
             ),
           ),
         ],

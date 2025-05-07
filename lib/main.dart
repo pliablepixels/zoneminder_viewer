@@ -135,20 +135,61 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   late int _selectedIndex;
+  late final ZoneMinderService _zmService;
   
   @override
   void initState() {
     super.initState();
     _selectedIndex = widget.initialIndex;
+    _zmService = Provider.of<ZoneMinderService>(context, listen: false);
+    _zmService.addListener(_onServiceChanged);
+    WidgetsBinding.instance.addObserver(this);
   }
   
-  List<Widget> _buildWidgetOptions(ZoneMinderService zmService) => [
-    const WizardView(),
-    const MonitorView(),
-    EventsView(zmService: zmService),
-  ];
+  @override
+  void dispose() {
+    _zmService.removeListener(_onServiceChanged);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+  
+  // This will be called when the app state changes (e.g., when coming back from background)
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Force rebuild all views when app comes to foreground
+      if (mounted) {
+        setState(() {});
+      }
+    }
+  }
+  
+  // This will be called when the ZoneMinderService notifies listeners
+  void _onServiceChanged() {
+    if (mounted) {
+      setState(() {
+        // Force rebuild all views when service changes
+      });
+    }
+  }
+  
+  // Use Key to force recreation of widgets when server changes
+  Key _getViewKey(Widget view) {
+    return ValueKey('${_zmService.baseUrl}_${view.runtimeType}');
+  }
+  
+  List<Widget> _buildWidgetOptions() {
+    final views = [
+      const WizardView(),
+      const MonitorView(),
+      EventsView(zmService: _zmService, key: ValueKey('events_${_zmService.baseUrl}')),
+    ];
+    
+    // Wrap each view with a KeyedSubtree to ensure proper recreation
+    return views.map((view) => KeyedSubtree(key: _getViewKey(view), child: view)).toList();
+  }
 
   void _onItemTapped(int index) {
     setState(() {
@@ -159,13 +200,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final zmService = Provider.of<ZoneMinderService>(context, listen: false);
     return Scaffold(
       appBar: AppBar(
         title: const Text('ZoneMinder Viewer'),
         backgroundColor: Colors.grey[900],
       ),
-      body: _buildWidgetOptions(zmService)[_selectedIndex],
+      body: _buildWidgetOptions()[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         items: const [
           BottomNavigationBarItem(

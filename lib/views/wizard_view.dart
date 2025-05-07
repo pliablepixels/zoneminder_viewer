@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import '../services/zoneminder_service.dart';
+import 'package:zoneminder_viewer/main.dart';
 
 class WizardView extends StatefulWidget {
   const WizardView({super.key});
@@ -77,9 +78,10 @@ class _WizardViewState extends State<WizardView> {
 
       if (mounted) {
         _logger.info('Login successful, navigating back to home');
-        // Pop back to the root and then push the home screen
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          '/',
+        // Replace the entire navigation stack with HomeScreen
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
           (Route<dynamic> route) => false,
         );
       }

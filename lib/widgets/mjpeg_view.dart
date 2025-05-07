@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:logging/logging.dart';
 
 // Import for WebView widgets
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
+
+final _logger = Logger('MjpegView');
 
 class MjpegView extends StatefulWidget {
   final Future<String> streamUrl;
@@ -48,6 +51,14 @@ class _MjpegViewState extends State<MjpegView> {
       
       final url = await widget.streamUrl;
       if (!mounted) return;
+      
+      if (url.isEmpty) {
+        setState(() {
+          _error = 'Empty stream URL';
+          _isLoading = false;
+        });
+        return;
+      }
       
       // Create platform-specific controller
       late final PlatformWebViewControllerCreationParams params;
@@ -99,6 +110,13 @@ class _MjpegViewState extends State<MjpegView> {
       }
 
       // For web platform, we need to use an iframe to properly handle the MJPEG stream
+      _logger.fine('Loading MJPEG stream from: $url');
+      
+      // Clear any existing content
+      await controller.clearCache();
+      await controller.clearLocalStorage();
+      
+      // Set up the WebView to display the MJPEG stream
       if (kIsWeb) {
         await controller.loadHtmlString('''
           <!DOCTYPE html>

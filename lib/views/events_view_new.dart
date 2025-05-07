@@ -13,7 +13,7 @@ class EventsView extends StatefulWidget {
   const EventsView({
     super.key,
     required this.zmService,
-  });
+  }) : super();
 
   @override
   State<EventsView> createState() => _EventsViewState();
@@ -34,13 +34,48 @@ class _EventsViewState extends State<EventsView> {
   @override
   void initState() {
     super.initState();
+    // Add listener for ZoneMinderService changes
+    widget.zmService.addListener(_onServiceChanged);
     _loadEvents();
+    
+    _logger.info('EventsView initialized for server: ${widget.zmService.baseUrl}');
+  }
+
+  @override
+  void didUpdateWidget(EventsView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Handle widget updates (e.g., when zmService changes)
+    if (widget.zmService != oldWidget.zmService) {
+      oldWidget.zmService.removeListener(_onServiceChanged);
+      widget.zmService.addListener(_onServiceChanged);
+      _onServiceChanged();
+    }
   }
 
   @override
   void dispose() {
+    widget.zmService.removeListener(_onServiceChanged);
     _searchController.dispose();
     super.dispose();
+  }
+
+  // Handle service changes (e.g., when base URL changes)
+  void _onServiceChanged() {
+    if (mounted) {
+      _logger.info('ZoneMinderService changed, refreshing events');
+      _logger.info('New server URL: ${widget.zmService.baseUrl}');
+      
+      // Clear existing data
+      setState(() {
+        _events = [];
+        _monitorNames = {};
+        _hasMore = true;
+        _isInitialLoad = true;
+      });
+      
+      // Reload events
+      _loadEvents();
+    }
   }
 
   Future<void> _loadEvents({bool loadMore = false}) async {
@@ -257,18 +292,26 @@ class _EventsViewState extends State<EventsView> {
                                 Container(
                                   width: 100,
                                   height: 75,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[200],
-                                    borderRadius: BorderRadius.circular(4),
-                                    image: DecorationImage(
-                                      image: NetworkImage(
-                                        zmService.getEventThumbnailUrl(eventId),
-                                      ),
-                                      fit: BoxFit.cover,
-                                      onError: (exception, stackTrace) {
-                                        // Handle image loading errors
-                                      },
-                                    ),
+                                  child: FutureBuilder<String>(
+                                    future: zmService.getEventThumbnailUrl(eventId),
+                                    builder: (context, snapshot) {
+                                      if (snapshot.connectionState == ConnectionState.waiting) {
+                                        return const Center(child: CircularProgressIndicator());
+                                      }
+                                      if (snapshot.hasError || !snapshot.hasData) {
+                                        return const Icon(Icons.error_outline, size: 40, color: Colors.grey);
+                                      }
+                                      return Container(
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey[200],
+                                          borderRadius: BorderRadius.circular(4),
+                                          image: DecorationImage(
+                                            image: NetworkImage(snapshot.data!),
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                      );
+                                    },
                                   ),
                                 )
                               else
