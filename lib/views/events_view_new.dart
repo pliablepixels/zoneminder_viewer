@@ -27,6 +27,7 @@ class _EventsViewState extends State<EventsView> {
   Map<int, Map<String, dynamic>> _monitorNames = {};
   Set<int> _selectedMonitorIds = {};
   final int _limit = 20;
+  int _currentPage = 1;
   bool _hasMore = true;
   bool _isInitialLoad = true;
   static final Logger _logger = Logger('EventsView');
@@ -54,8 +55,12 @@ class _EventsViewState extends State<EventsView> {
 
   @override
   void dispose() {
-    widget.zmService.removeListener(_onServiceChanged);
-    _searchController.dispose();
+    // Remove the listener when the widget is disposed
+    if (mounted) {
+      widget.zmService.removeListener(_onServiceChanged);
+    }
+    _events.clear();
+    _monitorNames.clear();
     super.dispose();
   }
 
@@ -65,16 +70,21 @@ class _EventsViewState extends State<EventsView> {
       _logger.info('ZoneMinderService changed, refreshing events');
       _logger.info('New server URL: ${widget.zmService.baseUrl}');
       
-      // Clear existing data
+      // Clear all existing data and state
       setState(() {
-        _events = [];
-        _monitorNames = {};
+        _events.clear();
+        _monitorNames.clear();
+        _currentPage = 1;
         _hasMore = true;
+        _isLoading = false;
         _isInitialLoad = true;
+        _error = null;
       });
       
-      // Reload events
-      _loadEvents();
+      // Force a complete reload
+      if (mounted) {
+        _loadEvents();
+      }
     }
   }
 
@@ -95,7 +105,8 @@ class _EventsViewState extends State<EventsView> {
       }
       
       // Calculate the next page to load
-      final currentPage = loadMore ? (_events.length ~/ _limit) + 1 : 1;
+      final currentPageRaw = loadMore ? (_events.length ~/ _limit) + 1 : 1;
+      final currentPage = currentPageRaw is int ? currentPageRaw : int.tryParse(currentPageRaw.toString()) ?? 1;
       
       // Load events
       final response = await zmService.getEvents(
@@ -105,15 +116,16 @@ class _EventsViewState extends State<EventsView> {
       );
 
       final newEvents = (response['events'] as List<dynamic>).cast<Map<String, dynamic>>();
-      final totalPages = response['totalPages'] as int;
-      
+      final totalPagesRaw = response['totalPages'];
+      final totalPages = totalPagesRaw is int ? totalPagesRaw : int.tryParse(totalPagesRaw.toString()) ?? 1;
+
       setState(() {
         if (loadMore) {
           _events.addAll(newEvents);
         } else {
           _events = newEvents;
         }
-        _hasMore = currentPage < totalPages;
+        _hasMore = (currentPage is int && totalPages is int) ? currentPage < totalPages : false;
       });
     } catch (e) {
       setState(() {

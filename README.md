@@ -76,7 +76,7 @@ The funny part was somewhere along the way, it suggested I replace streaming MJP
 * There is a solid place for these tools. They get you started reasonably well, but don't go overboard. You still need to be the "expert" and you still need to know when these tools go for a loop (not kidding)! 
 * They are good at solving contained jobs. 
 * They are _very_ _very_far from being you
-* I don't yet but the notion that AI code is better quality. I'm not seeing it yet. But I do buy them saving you a lot of time, if you know how to use them (corollary: If you don't, you'll spend a lot of time generating truck loads of tech debt and wasting your time)
+* I don't yet buy the notion that AI code is better quality. I'm not seeing it yet. But I do buy them saving you a lot of time, if you know how to use them (corollary: If you don't, you'll spend a lot of time generating truck loads of tech debt and wasting your time)
 
 ## Building the Project
 

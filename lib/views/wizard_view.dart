@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import '../services/zoneminder_service.dart';
+import 'package:provider/provider.dart';
 import 'package:zoneminder_viewer/main.dart';
 
 class WizardView extends StatefulWidget {
@@ -15,7 +16,7 @@ class _WizardViewState extends State<WizardView> {
   final _urlController = TextEditingController(text: 'https://demo.zoneminder.com');
   final _usernameController = TextEditingController(text: 'x');
   final _passwordController = TextEditingController(text: 'x');
-  final _zoneminderService = ZoneMinderService();
+  late ZoneMinderService _zoneminderService;
   bool _isLoading = false;
   String? _error;
   static final Logger _logger = Logger('WizardView');
@@ -23,7 +24,11 @@ class _WizardViewState extends State<WizardView> {
   @override
   void initState() {
     super.initState();
-    _initializeService();
+    // Get the service from Provider after the first build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _zoneminderService = Provider.of<ZoneMinderService>(context, listen: false);
+      _initializeService();
+    });
   }
 
   Future<void> _initializeService() async {

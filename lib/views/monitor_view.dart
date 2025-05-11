@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
 import 'dart:async';
 import 'dart:convert';
 import '../services/zoneminder_service.dart';
@@ -14,17 +15,36 @@ class MonitorView extends StatefulWidget {
 }
 
 class _MonitorViewState extends State<MonitorView> {
-  final ZoneMinderService _zoneminderService = ZoneMinderService();
+  late final ZoneMinderService _zoneminderService;
   List<Map<String, dynamic>> _monitors = [];
   bool _isLoading = true;
+  bool _isInitialLoad = true;
   String? _error;
-
-
 
   @override
   void initState() {
     super.initState();
+    _zoneminderService = Provider.of<ZoneMinderService>(context, listen: false);
+    _zoneminderService.addListener(_onServiceChanged);
     _fetchMonitors();
+  }
+  
+  @override
+  void dispose() {
+    _zoneminderService.removeListener(_onServiceChanged);
+    super.dispose();
+  }
+  
+  void _onServiceChanged() {
+    if (mounted) {
+      setState(() {
+        _monitors.clear();
+        _isLoading = true;
+        _isInitialLoad = true;
+        _error = null;
+      });
+      _fetchMonitors();
+    }
   }
 
   Future<void> _fetchMonitors() async {

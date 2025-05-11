@@ -2,6 +2,7 @@ import 'dart:async' show TimeoutException;
 import 'dart:convert';
 import 'dart:math';
 import 'package:http/http.dart' as http;
+import 'package:zoneminder_viewer/utils/jwt_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:logging/logging.dart';
 import 'package:flutter/foundation.dart';
@@ -14,13 +15,20 @@ class ZoneMinderService extends ChangeNotifier {
   static const String _accessTokenExpiryKey = 'access_token_expiry';
   static const String _refreshTokenExpiryKey = 'refresh_token_expiry';
 
-  String _baseUrl = 'https://demo.zoneminder.com';
+  String _baseUrl = '';
   String _apiUrl = '';
   String? _accessToken;
   String? _refreshToken;
   DateTime? _accessTokenExpiry;
   DateTime? _refreshTokenExpiry;
   bool _isInitialized = false;
+
+  // Store credentials for re-login
+  String? _username;
+  String? _password;
+
+  static const String _usernameKey = 'zm_username';
+  static const String _passwordKey = 'zm_password';
 
   /// Ensures the service is initialized before making any API calls
   Future<void> ensureInitialized() async {
@@ -98,22 +106,19 @@ class ZoneMinderService extends ChangeNotifier {
     
     // Handle empty or null URL
     if (url.isEmpty) {
-      _logger.warning('Empty URL provided, using default');
-      return 'https://demo.zoneminder.com/api';
+      _logger.info('Empty URL provided, using default');
+      url = '';
     }
-
-    // Ensure URL has a scheme
-    if (!url.startsWith('http')) {
+    
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
       url = 'https://$url';
-      _logger.fine('Added scheme: $url');
+      _logger.info('Added https:// to URL: $url');
     }
     
     try {
-      // Parse the URL to ensure it's valid
       final uri = Uri.parse(url);
       
-      // Rebuild the URL with proper formatting
-      final sanitized = Uri(
+      url = Uri(
         scheme: uri.scheme,
         host: uri.host,
         port: uri.port,
@@ -121,12 +126,13 @@ class ZoneMinderService extends ChangeNotifier {
         query: uri.query,
       ).toString();
       
-      _logger.fine('Sanitized URL: $sanitized');
-      return sanitized;
+      url = url.replaceAll(RegExp(r'/+$'), '');
+      _logger.fine('Sanitized URL: $url');
+      
+      return url;
     } catch (e) {
-      _logger.severe('Error parsing URL: $e');
-      // Return a default URL if parsing fails
-      return 'https://demo.zoneminder.com/api';
+      _logger.severe('Error sanitizing URL: $e');
+      return '';
     }
   }
 
@@ -327,6 +333,10 @@ class ZoneMinderService extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> login(String username, String password) async {
+    // Save credentials in memory for possible re-login
+    _username = username;
+    _password = password;
+
     _logger.info('Attempting login for user: $username');
     
     // Input validation
@@ -364,12 +374,20 @@ class ZoneMinderService extends ChangeNotifier {
       http.Response response;
       
       try {
-        response = await http.post(
-          url,
-          headers: headers,
-          body: body,
-          encoding: Encoding.getByName('utf-8'),
-        ).timeout(const Duration(seconds: 30));
+        // First try with the regular request
+        try {
+          response = await http.post(
+            url,
+            headers: headers,
+            body: body,
+            encoding: Encoding.getByName('utf-8'),
+          ).timeout(const Duration(seconds: 30));
+        } catch (e) {
+          _logger.warning('First attempt failed, trying with CORS workaround: $e');
+          
+          // For security, do NOT send tokens through a CORS proxy. Only use proxy for public requests (never for login).
+          throw Exception('Network error: CORS issue detected. Please use a native app or configure your server for CORS.');
+        }
       } catch (e) {
         _logger.severe('Network error during login: $e');
         throw Exception('Network error: ${e.toString()}');
@@ -412,9 +430,8 @@ class ZoneMinderService extends ChangeNotifier {
             await prefs.setString(_accessTokenKey, _accessToken!);
             await prefs.setInt(_accessTokenExpiryKey, _accessTokenExpiry!.millisecondsSinceEpoch);
             
-            // Store username and password for future token refreshes
-            await prefs.setString('username', username);
-            await prefs.setString('password', password);
+            // Do NOT store username and password for future token refreshes (security best practice)
+            // User will be prompted to re-enter credentials if refresh fails.
             
             if (_refreshToken != null && _refreshToken!.isNotEmpty) {
               await prefs.setString(_refreshTokenKey, _refreshToken!);
@@ -453,27 +470,6 @@ class ZoneMinderService extends ChangeNotifier {
     }
   }
 
-  /// Logs out the current user by clearing authentication tokens
-  Future<void> logout() async {
-    _logger.info('Logging out');
-    
-    _accessToken = null;
-    _refreshToken = null;
-    _accessTokenExpiry = null;
-    _refreshTokenExpiry = null;
-    
-    // Clear tokens and expiry times from preferences
-    final prefs = await SharedPreferences.getInstance();
-    await Future.wait([
-      prefs.remove(_accessTokenKey),
-      prefs.remove(_refreshTokenKey),
-      prefs.remove(_accessTokenExpiryKey),
-      prefs.remove(_refreshTokenExpiryKey),
-    ]);
-    
-    _logger.info('Successfully logged out and cleared all token data');
-    notifyListeners();
-  }
 
   Future<List<Map<String, dynamic>>> getMonitors() async {
     await ensureInitialized();
@@ -551,13 +547,39 @@ class ZoneMinderService extends ChangeNotifier {
   }
 
   Future<void> setBaseUrl(String url) async {
+    if (_baseUrl == url) {
+      _logger.info('Base URL is already set to: $url');
+      return;
+    }
+    
+    _logger.info('Updating base URL from $_baseUrl to $url');
+    
+    // Clear existing tokens and state
+    _accessToken = null;
+    _refreshToken = null;
+    _accessTokenExpiry = null;
+    _refreshTokenExpiry = null;
+    
+    // Update URLs
     _baseUrl = url;
     _apiUrl = _sanitizeUrl('$_baseUrl/api');
-    _logger.info('Base URL updated to: $_baseUrl');
-    notifyListeners();
-
+    
+    // Save to preferences
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_baseUrlKey, _baseUrl);
+    await prefs.remove(_accessTokenKey);
+    await prefs.remove(_refreshTokenKey);
+    await prefs.remove(_accessTokenExpiryKey);
+    await prefs.remove(_refreshTokenExpiryKey);
+    
+    _logger.info('Base URL updated to: $_baseUrl, tokens cleared');
+    
+    // Notify listeners and force reinitialization
+    _isInitialized = false;
+    notifyListeners();
+    
+    // Reinitialize the service with the new URL
+    await ensureInitialized();
   }
 
   String get baseUrl => _baseUrl;
@@ -566,139 +588,71 @@ class ZoneMinderService extends ChangeNotifier {
 
   String get apiUrl => _apiUrl;
 
-  // Get the current access token, refreshing it if necessary
+  /// Logs out the current user by clearing authentication tokens
+  Future<void> logout() async {
+    _logger.info('Logging out');
+    _accessToken = null;
+    _refreshToken = null;
+    _accessTokenExpiry = null;
+    _refreshTokenExpiry = null;
+    _username = null;
+    _password = null;
+    // Clear tokens, expiry times, and credentials from preferences
+    final prefs = await SharedPreferences.getInstance();
+    await Future.wait([
+      prefs.remove(_accessTokenKey),
+      prefs.remove(_refreshTokenKey),
+      prefs.remove(_accessTokenExpiryKey),
+      prefs.remove(_refreshTokenExpiryKey),
+      prefs.remove(_usernameKey),
+      prefs.remove(_passwordKey),
+    ]);
+    notifyListeners();
+  }
+
+  /// Returns true if the user is authenticated (has a valid access token)
+  bool get isAuthenticated => _accessToken != null && _accessToken!.isNotEmpty;
+
+  /// Returns a valid access token, refreshing if needed
   Future<String?> getValidToken() async {
-    if (_accessToken == null) {
-      _logger.fine('No access token available');
-      return null;
-    }
-    
-    // Check if token is still valid
-    if (await isTokenValid()) {
-      _logger.fine('Token is still valid');
+    if (_accessToken == null) return null;
+    if (!JwtUtils.isExpired(_accessToken!)) {
       return _accessToken;
     }
-    
-    _logger.info('Token expired or invalid, attempting to refresh...');
-    
-    // Try to refresh the token
-    try {
-      final refreshed = await _refreshTokenIfAvailable();
-      if (refreshed) {
-        _logger.info('Token refreshed successfully');
-        return _accessToken;
-      } else {
-        _logger.warning('Failed to refresh token');
-        return null;
-      }
-    } catch (e) {
-      _logger.warning('Error refreshing token: $e');
-      return null;
-    }
+    final refreshed = await _refreshTokenIfAvailable();
+    if (refreshed) return _accessToken;
+    await logout();
+    return null;
   }
 
-  /// Checks if the current token is valid by making a test API call
-  Future<bool> isTokenValid() async {
-    if (_accessToken == null) {
-      _logger.fine('No access token to validate');
-      return false;
-    }
-    
-    // Check if token is expired using stored expiry time
-    if (_accessTokenExpiry != null) {
-      final now = DateTime.now();
-      if (now.isAfter(_accessTokenExpiry!)) {
-        _logger.fine('Access token expired at $_accessTokenExpiry');
-        return false;
-      }
-      
-      // If we have a valid expiry time and it's in the future, token is valid
-      _logger.fine('Access token is valid until $_accessTokenExpiry');
-      return true;
-    }
-    
-    // Fallback to API validation if we don't have expiry info
-    _logger.fine('No expiry info, falling back to API validation');
-    try {
-      final url = await _addAuthToUrl('$_apiUrl/host/getVersion.json');
-      final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse(url),
-        headers: headers,
-      );
-      
-      final isValid = response.statusCode == 200;
-      _logger.fine('API validation result: ${isValid ? 'valid' : 'invalid'}');
-      return isValid;
-    } catch (e) {
-      _logger.warning('Token validation error: $e');
-      return false;
-    }
-  }
-
-  // Attempt to refresh the access token if a refresh token is available
+  /// Attempts to refresh the access token (stub, since username/password are not stored)
   Future<bool> _refreshTokenIfAvailable() async {
-    _logger.info('Attempting to refresh token by logging in again...');
-    
-    try {
-      // Get stored credentials
-      final prefs = await SharedPreferences.getInstance();
-      final username = prefs.getString('username');
-      final password = prefs.getString('password');
-      
-      _logger.fine('Retrieved stored credentials - Username: ${username != null ? 'present' : 'not present'}');
-      
-      if (username == null || username.isEmpty || password == null || password.isEmpty) {
-        _logger.warning('No stored credentials available for token refresh');
-        return false;
-      }
-      
-      _logger.info('Performing new login with stored credentials for user: $username');
-      
+    // Try to re-login using saved credentials
+    final prefs = await SharedPreferences.getInstance();
+    _username ??= prefs.getString(_usernameKey);
+    _password ??= prefs.getString(_passwordKey);
+
+    if (_username != null && _password != null) {
       try {
-        // Clear existing tokens before attempting to refresh
-        await _clearTokens();
-        
-        // Perform login with stored credentials
-        await login(username, password);
-        
-        // Verify we have a valid token after login
-        if (_accessToken == null || _accessToken!.isEmpty) {
-          _logger.warning('Login succeeded but no access token was received');
-          return false;
-        }
-        
-        _logger.info('Token refresh via login successful, new access token expires at $_accessTokenExpiry');
+        _logger.info('Attempting to re-login with stored credentials...');
+        await login(_username!, _password!);
+        _logger.info('Re-login successful');
         return true;
-      } on TimeoutException catch (e) {
-        _logger.severe('Login timed out during token refresh: $e');
-        await _clearTokens();
-        return false;
-      } on FormatException catch (e) {
-        _logger.severe('Invalid response format during token refresh: $e');
-        await _clearTokens();
-        return false;
-      } on http.ClientException catch (e) {
-        _logger.severe('Network error during token refresh: $e');
-        await _clearTokens();
-        return false;
       } catch (e) {
-        _logger.severe('Unexpected error during token refresh: $e');
-        await _clearTokens();
-        return false;
+        _logger.warning('Re-login failed: $e');
       }
-    } catch (e) {
-      _logger.severe('Error during token refresh process: $e');
-      await _clearTokens();
-      return false;
+    } else {
+      _logger.warning('No credentials stored for refresh; user must re-authenticate.');
     }
+    await logout();
+    return false;
   }
 
-  bool get isAuthenticated => _accessToken != null;
+    // Stub for getMonitorsMap (implement as needed)
 
-  /// Generates a URL for an event thumbnail
-  /// 
-  /// The format is: base_url/index.php?eid=<event_id>&fid=snapshot&view=image&width=200&height=125
+
+  // --- All methods below are now correctly inside ZoneMinderService ---
+
   Future<String> getEventThumbnailUrl(int eventId, {int width = 200, int height = 125}) async {
     final params = <String, String>{
       'eid': eventId.toString(),
@@ -911,14 +865,14 @@ class ZoneMinderService extends ChangeNotifier {
           _logger.fine('Retrieved monitor name: $name');
           return name;
         } else {
-          _logger.warning('Unexpected response format for monitor $monitorId: $data');
+          _logger.info('Unexpected response format for monitor $monitorId: $data');
         }
       } else {
-        _logger.warning('Failed to fetch monitor $monitorId: ${response.statusCode} - ${response.body}');
+        _logger.info('Failed to fetch monitor $monitorId: ${response.statusCode} - ${response.body}');
       }
       return 'Monitor $monitorId';
     } catch (e) {
-      _logger.warning('Failed to get monitor name: $e');
+      _logger.info('Failed to get monitor name: $e');
       return 'Monitor $monitorId';
     }
   }

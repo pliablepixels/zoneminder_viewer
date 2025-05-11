@@ -172,26 +172,28 @@ class _MjpegViewState extends State<MjpegView> {
 
     if (_error != null) {
       return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, color: Colors.red, size: 48),
-            const SizedBox(height: 16),
-            Text(_error!),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
-                if (mounted) {
-                  setState(() {
-                    _error = null;
-                    _isLoading = true;
-                  });
-                  _loadStreamUrl();
-                }
-              },
-              child: const Text('Retry'),
-            ),
-          ],
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 48),
+              const SizedBox(height: 16),
+              Text(_error!),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  if (mounted) {
+                    setState(() {
+                      _error = null;
+                      _isLoading = true;
+                    });
+                    _loadStreamUrl();
+                  }
+                },
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
         ),
       );
     }
