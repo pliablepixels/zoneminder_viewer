@@ -13,7 +13,7 @@ Overall, let me say this:
    - Start small (just like I would if I coded myself)
 - Day 3: Much better, I roughed in an events view in seconds, now that I know how to work with it. However, there were many prompting loops required to fix issues it continues to create.
 
-- The jury is still out on quality. I just don't see these tools producing high quality code or well structured code. There are many examples of this. As one example, it decided to create a single `main.dart` file with all views. I had to specifically prompt it to separate views. It chose to create a singleton service for my API calls (good), but then proceeded to make copies of the service to fix bugs in views (bad) that resulted in inconsistent state across views. It's generated JWT authentication code was poorly written and did not handle refresh tokens. It also did not carry over the auth tokens to other URLs. Many other examples.
+- The jury is still out on quality. I just don't see these tools producing high quality code or well structured code. There are many examples of this. As one example, it decided to create a single `main.dart` file with all views. I had to specifically prompt it to separate views. It chose to create a singleton service for my API calls (good), but then proceeded to make copies of the service to fix bugs in views (bad) that resulted in inconsistent state across views. Its generated JWT authentication code was poorly written and did not handle refresh tokens. It also did not carry over the auth tokens to other URLs. Many other examples.
 
 - It still continues to make large scale mistakes for simple asks. Sometimes it works well, sometimes it goes on a complete tangent, that I just have to ask it to undo. For example, even though I got events working in minutes, when I asked it fix one aspect of the events screen, it completely messed up my generic zoneminder API services to a point that monitors stopped working.
 
@@ -24,7 +24,7 @@ Overall, let me say this:
 
 ## More details about my experiences from this effort
 
-* At home, and for my personal experiments/projects, I code using both copilot (agent mode + claude 3.5 and 3.7) and windsurf. For this experiment, I used its `base` model. Even with base, **Windsurf is better in my experiments, by a large margin when I compare it to co-pilot.**
+* At home, and for my personal experiments/projects, I code using both copilot (agent mode + claude 3.5 and 3.7) and windsurf. For this experiment, I used its `base` model. Even with base, **Windsurf is better in my experiments, by a large margin when I compare it to co-pilot.**. Note: I later switched to `claude 3.7 thinking` - not sure I noticed a lot of difference. 
 
 _(For those who want to know the details: these editors don't make chat history easy, but a big shout out to [Shottr](https://shottr.cc/) that allows scrolling image captures. You'll see two folders with several images. [failed run 1](https://github.com/pliablepixels/zoneminder_viewer/tree/main/images/chats/run1-failed) and [failed run 2](https://github.com/pliablepixels/zoneminder_viewer/tree/main/images/chats/run2-failed) are histories of my chat with options that did not work. In these, I started with more explicit requirements. [success run 3](https://github.com/pliablepixels/zoneminder_viewer/tree/main/images/chats/run-3-success-part) is a partial capture of me starting small and building up. A lot of fun happened after these screenshots, but you get the gist. If you click on the images and find them super tiny, please increase zoom factor by a lot so you can read.)_
 
@@ -64,21 +64,25 @@ The funny part was somewhere along the way, it suggested I replace streaming MJP
 
 * Windsurf was **well ahead** of copilot agent mode and its integrated experience is more convenient
 * **Writing detailed PRDs did not work for me**. It confused the agents way too much to get to a working system. It was great to start, but end result was a massive mess to actually get to a running app.
-* Starting small and incrementally building the app worked much better
-* Being super specific helps, but almost to a point that you have to be the guiding expert
-* It operates least frustratingly when the problem it is solving doesn't have a lot of dependencies on other aspects of the app
-* The agents work better by creating problems and then trying to fix them (takes a lot of time though, but it eventuall gets there).Get used to seeing the agent produce poor code with confidence and break everything. Don't give up though - keep guiding it on errors (if it is not able to self detect - sometimes it can if the output is on a terminal, but if its UI app related, it won't know)
-* **super important** Know when to break the agent loop with human intervention. Break up the problem statement into smaller chunks if the old request keeps producing problems (ask it to undo X steps). If you see the agent mess up over and over again and breaking up the problem doesn't help, just do it manually. At some point, you will need to own your time. And this is where I'll say, stay off what the industry calls _vibe coding_. Use prompts when you need, write code when you need.
-* It is critical to assess what it generates. Just because it works doesn't mean it is right. Here is one of many examples:
+* **Starting small and incrementally building** the app worked much better
+* **Being super specific helps**, but almost to a point that you have to be the guiding expert
+* **Isolate what you want it to fix with minimal dependencies** - It operates least frustratingly when the problem it is solving doesn't have a lot of dependencies on other aspects of the app
+* **Get used to it breaking code and fixing it iteratively** - The agents work better by creating problems and then trying to fix them (takes a lot of time though, but it eventuall gets there).Get used to seeing the agent produce poor code with confidence and break everything. Don't give up though - keep guiding it on errors (if it is not able to self detect - sometimes it can if the output is on a terminal, but if its UI app related, it won't know)
+* **Know when to break the agent loop with human intervention**. Break up the problem statement into smaller chunks if the old request keeps producing problems (ask it to undo X steps). If you see the agent mess up over and over again and breaking up the problem doesn't help, just do it manually. At some point, you will need to own your time. And this is where I'll say, stay off what the industry calls _vibe coding_. Use prompts when you need, write code when you need.
+* **Fact check code**:It is critical to assess what it generates. Just because it works doesn't mean it is right. Here is one of many examples:
    * It struggled to get the authentication code right. The app uses a common pattern - you use a login API and it  gets back access and refresh tokens. When I gave it instructions to use access and refersh tokens and auto refresh when it expires, it implemented this approach by trying an API - if the answer was a 401, then it would re-login. It completely ignored the expiry times that came with the tokens. It also did not carry over the auth tokens to other URLs. Many other mistakes, such as inventing a new endpoint to refresh a token, when the API page did not list such and endpoint.
 
 ![](images/monitors.png?raw=true)
 
 * There is a solid place for these tools. They get you started reasonably well, but don't go overboard. You still need to be the "expert" and you still need to know when these tools go for a loop (not kidding)! 
 * They are good at solving contained jobs. 
-* They are _very_ _very_far from being you
-* I don't yet buy the notion that AI code is better quality. I'm not seeing it yet. I actually think they repeatedly produce lower quality code. But I do buy them saving you a lot of time, if you know how to use them (corollary: If you don't, you'll spend a lot of time generating truck loads of tech debt and wasting your time)
-* Build reusable libraries whenever you can. Automated AI code is not a replacement for well structured libraries: if reducing time to market for repeated tasks is why ytou are using AI. Sure you can use AI to generate those libraries, but everything I said above applies. Use it judiciously.
+* They are _very_ _very_ far from being you
+* I don't yet buy the notion that AI code is better quality. I'm not seeing it yet. I actually think they repeatedly produce lower quality code. But I do buy them saving you time, if you know how to use them (corollary: If you don't, you'll spend a lot of time generating truck loads of tech debt and wasting your time). Great options that it is reasonably good at are:
+   * Document generation for code or design. Use it as a starting point.
+   * Test case generation (unit tests, which are isolated)
+   * Understanding the codebase (including getting to a part of the code that does something you are looking for)
+   * Analyze debug logs (well, not always, but in general, it can help you understand what is going on)
+* **Build reusable libraries whenever you can. Automated AI code is not a replacement for well structured libraries**: if reducing time to market for repeated tasks is why ytou are using AI. Sure you can use AI to generate those libraries, but everything I said above applies. Use it judiciously.
 
 ## Building the Project
 
@@ -87,7 +91,7 @@ To clone and build this project:
 1. Install Flutter SDK from [flutter.dev](https://flutter.dev/docs/get-started/install)
 2. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/zoneminder_viewer.git
+   git clone https://github.com/pliablepixels/zoneminder_viewer.git
    cd zoneminder_viewer
    ```
 3. Install dependencies:
