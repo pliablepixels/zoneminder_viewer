@@ -5,6 +5,10 @@
 
 A Flutter-based application for viewing and managing ZoneMinder security camera feeds across multiple platforms. I've only tested with `macos`. I think there are still CORS issues to resolve for browsers in the one or two times I tried to run it in Chrome.
 
+Update, May 19:
+- Some good quality changes after I moved to SWE-1
+- More later as I analyze the diffs
+
 Overall, let me say this:
 - Day 1: I found the experience very unproductive. I had started with a more detailed PRD that listed all the functionality I wanted and I was expecting it to generate code that worked. I just couldn't make progress with the many errors it kept generating/fixing/and re-generating.
 - Day 2: (After I pivoted my approach), I found it to be something I can leverage with two habit changing lessons for me:
